@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Building2 } from 'lucide-react';
+import { LogOut, User, Building2, AlertCircle } from 'lucide-react';
 import LocationMap from '@/components/maps/LocationMap';
 import AttendanceStatus from '@/components/attendance/AttendanceStatus';
 import AttendanceButtons from '@/components/attendance/AttendanceButtons';
@@ -26,43 +26,59 @@ export default function DashboardClient() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
-    loadUserData();
-    getCurrentLocation();
   }, []);
 
   const checkAuth = async () => {
-    const result = await authService.checkAuth();
-    
-    if (!result.authenticated) {
-      router.push('/login');
-      return;
-    }
-    
-    // ✅ FIX: Handle undefined case
-    if (result.user) {
-      setUser(result.user);
-    } else {
-      setUser(null);
+    try {
+      const result = await authService.checkAuth();
+      
+      if (!result.authenticated) {
+        router.push('/login');
+        return;
+      }
+      
+      if (result.user) {
+        setUser(result.user);
+        // Load data setelah auth success
+        await loadUserData(result.user);
+        getCurrentLocation();
+      } else {
+        setError('User data tidak ditemukan');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Auth error:', error);
+      setError('Error checking authentication');
+      setLoading(false);
     }
   };
 
-  const loadUserData = async () => {
+  const loadUserData = async (userData: UserType) => {
     try {
-      const userData = authService.getUser();
+      console.log('Loading user data:', userData);
       
-      if (userData && userData.kar_kd_unit) {
+      // Get unit data
+      if (userData.kar_kd_unit) {
         const unitResponse = await api.getUnitData(userData.kar_kd_unit);
-        if (unitResponse.success) {
+        console.log('Unit response:', unitResponse);
+        
+        if (unitResponse.success && unitResponse.data && unitResponse.data.length > 0) {
           setUnit(unitResponse.data[0]);
+        } else {
+          setError('Data unit tidak ditemukan');
         }
       }
 
-      if (userData && userData.kar_nama) {
+      // Get today's attendance
+      if (userData.kar_nama) {
         const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
-        if (attendanceResponse.success && attendanceResponse.data.length > 0) {
+        console.log('Attendance response:', attendanceResponse);
+        
+        if (attendanceResponse.success && attendanceResponse.data && attendanceResponse.data.length > 0) {
           const attendance = attendanceResponse.data[0];
           setTodayAttendance({
             checkInTime: attendance._IN,
@@ -72,6 +88,7 @@ export default function DashboardClient() {
       }
     } catch (error) {
       console.error('Error loading user data:', error);
+      setError('Gagal memuat data user');
     } finally {
       setLoading(false);
     }
@@ -124,7 +141,7 @@ export default function DashboardClient() {
         longitude: userLocation.lng.toString()
       });
 
-      await loadUserData();
+      await loadUserData(user);
       alert('Check In berhasil!');
     } catch (error) {
       console.error('Error during check in:', error);
@@ -150,7 +167,7 @@ export default function DashboardClient() {
         longitude: userLocation.lng.toString()
       });
 
-      await loadUserData();
+      await loadUserData(user);
       alert('Check Out berhasil!');
     } catch (error) {
       console.error('Error during check out:', error);
@@ -165,16 +182,68 @@ export default function DashboardClient() {
     router.push('/login');
   };
 
+  const handleRetry = () => {
+    setError(null);
+    setLoading(true);
+    checkAuth();
+  };
+
+  // Debug info
+  console.log('Dashboard state:', { user, unit, loading, error });
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Memuat dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="space-y-2">
+            <button
+              onClick={handleRetry}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
+            >
+              Coba Lagi
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!user || !unit) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Data Tidak Lengkap</h2>
+          <p className="text-gray-600 mb-4">Data user atau unit tidak ditemukan</p>
+          <button
+            onClick={handleLogout}
+            className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
+          >
+            Kembali ke Login
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const distance = unit ? calculateDistance(
