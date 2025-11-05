@@ -5,7 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// ✅ TAMBAH INTERFACE INI
 export interface BrowserInfo {
   userAgent: string;
   platform: string;
@@ -13,7 +12,11 @@ export interface BrowserInfo {
   language: string;
 }
 
-export function getBrowserInfo(): BrowserInfo {
+export function getBrowserInfo(): BrowserInfo | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
   return {
     userAgent: navigator.userAgent,
     platform: navigator.platform,

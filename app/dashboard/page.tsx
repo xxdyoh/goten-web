@@ -25,14 +25,18 @@ export default function Dashboard() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
     checkAuth();
     loadUserData();
     getCurrentLocation();
   }, []);
 
   const checkAuth = () => {
+    if (!isClient) return;
+    
     const token = localStorage.getItem('auth_token');
     const userData = localStorage.getItem('user_data');
     
@@ -45,23 +49,27 @@ export default function Dashboard() {
   };
 
   const loadUserData = async () => {
+    if (!isClient) return;
+    
     try {
       const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
       
-      // Get unit data
-      const unitResponse = await api.getUnitData(userData.kar_kd_unit);
-      if (unitResponse.success) {
-        setUnit(unitResponse.data[0]);
+      if (userData.kar_kd_unit) {
+        const unitResponse = await api.getUnitData(userData.kar_kd_unit);
+        if (unitResponse.success) {
+          setUnit(unitResponse.data[0]);
+        }
       }
 
-      // Get today's attendance
-      const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
-      if (attendanceResponse.success && attendanceResponse.data.length > 0) {
-        const attendance = attendanceResponse.data[0];
-        setTodayAttendance({
-          checkInTime: attendance._IN,
-          checkOutTime: attendance._OUT
-        });
+      if (userData.kar_nama) {
+        const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
+        if (attendanceResponse.success && attendanceResponse.data.length > 0) {
+          const attendance = attendanceResponse.data[0];
+          setTodayAttendance({
+            checkInTime: attendance._IN,
+            checkOutTime: attendance._OUT
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -71,6 +79,8 @@ export default function Dashboard() {
   };
 
   const getCurrentLocation = () => {
+    if (!isClient) return;
+    
     setIsRefreshingLocation(true);
     
     if (!navigator.geolocation) {
@@ -102,7 +112,7 @@ export default function Dashboard() {
   };
 
   const handleCheckIn = async () => {
-    if (!user || !unit) return;
+    if (!user || !unit || !isClient) return;
     
     setIsCheckingIn(true);
     try {
@@ -117,7 +127,6 @@ export default function Dashboard() {
         longitude: userLocation.lng.toString()
       });
 
-      // Refresh today's attendance
       await loadUserData();
       alert('Check In berhasil!');
     } catch (error) {
@@ -129,7 +138,7 @@ export default function Dashboard() {
   };
 
   const handleCheckOut = async () => {
-    if (!user || !unit) return;
+    if (!user || !unit || !isClient) return;
     
     setIsCheckingOut(true);
     try {
@@ -144,7 +153,6 @@ export default function Dashboard() {
         longitude: userLocation.lng.toString()
       });
 
-      // Refresh today's attendance
       await loadUserData();
       alert('Check Out berhasil!');
     } catch (error) {
@@ -156,12 +164,15 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
+    if (!isClient) return;
+    
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     router.push('/login');
   };
 
-  if (loading) {
+  // Show loading until client-side rendering is ready
+  if (!isClient || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -170,7 +181,19 @@ export default function Dashboard() {
   }
 
   if (!user || !unit) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg text-gray-600">Data user tidak ditemukan</p>
+          <button 
+            onClick={() => router.push('/login')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Kembali ke Login
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const distance = unit ? calculateDistance(
@@ -245,7 +268,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Attendance History (akan diimplement nanti) */}
+            {/* Attendance History */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
                 Riwayat Absensi
