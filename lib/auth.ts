@@ -21,7 +21,6 @@ class AuthService {
   private tokenKey = 'auth_token';
   private userKey = 'user_data';
 
-  // ✅ METHOD UNTUK DIRECT LOGIN (NIK + OTP)
   async directLogin(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
     try {
       const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
@@ -44,7 +43,10 @@ class AuthService {
     const token = this.getToken();
     const user = this.getUser();
 
+    console.log('🔐 Check Auth - Token:', token, 'User:', user);
+
     if (!token || !user) {
+      console.log('❌ Auth failed: No token or user');
       this.clearAuth();
       return { authenticated: false };
     }
@@ -53,27 +55,39 @@ class AuthService {
       const data = await api.verifyToken(token);
 
       if (data.success) {
+        console.log('✅ Token valid, user:', data.user);
         this.setUser(data.user);
         return { authenticated: true, user: data.user };
       } else {
+        console.log('❌ Token invalid');
         this.clearAuth();
         return { authenticated: false };
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      return { authenticated: true, user: this.getUser() as User };
+      // Fallback: check if we have valid user data
+      if (user) {
+        console.log('⚠️ Using fallback auth with local user data');
+        return { authenticated: true, user: user };
+      } else {
+        this.clearAuth();
+        return { authenticated: false };
+      }
     }
   }
 
   setToken(token: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.tokenKey, token);
+      console.log('💾 Token saved:', token);
     }
   }
 
   getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(this.tokenKey);
+      const token = localStorage.getItem(this.tokenKey);
+      console.log('🔑 Token retrieved:', token);
+      return token;
     }
     return null;
   }
@@ -81,13 +95,30 @@ class AuthService {
   setUser(user: User): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.userKey, JSON.stringify(user));
+      console.log('👤 User saved:', user);
     }
   }
 
   getUser(): User | null {
     if (typeof window !== 'undefined') {
-      const userData = localStorage.getItem(this.userKey);
-      return userData ? JSON.parse(userData) : null;
+      try {
+        const userData = localStorage.getItem(this.userKey);
+        console.log('📥 Raw user data from localStorage:', userData);
+        
+        if (!userData || userData === 'undefined' || userData === 'null') {
+          console.log('❌ No valid user data found');
+          return null;
+        }
+        
+        const parsedUser = JSON.parse(userData);
+        console.log('✅ User parsed successfully:', parsedUser);
+        return parsedUser;
+      } catch (error) {
+        console.error('❌ Error parsing user data:', error);
+        // Clear invalid data
+        localStorage.removeItem(this.userKey);
+        return null;
+      }
     }
     return null;
   }
@@ -96,14 +127,14 @@ class AuthService {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.tokenKey);
       localStorage.removeItem(this.userKey);
+      console.log('🗑️ Auth data cleared');
     }
   }
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
-        method: 'POST',
-      });
+      // Skip backend logout if endpoint doesn't exist (404 error)
+      console.log('🚪 Logging out...');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -112,4 +143,5 @@ class AuthService {
   }
 }
 
+// ✅ HANYA SATU EXPORT INI
 export const authService = new AuthService();

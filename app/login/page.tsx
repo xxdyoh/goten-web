@@ -28,16 +28,20 @@ export default function Login() {
 
     try {
       const browserInfo = getBrowserInfo();
+      console.log('🔐 Attempting login with:', { karNik, otp, browserInfo });
       
-      // ✅ GUNAKAN AUTH SERVICE UNTUK LOGIN
       const result = await authService.directLogin(karNik, otp, browserInfo);
+      console.log('🔐 Login result:', result);
 
       if (result.success) {
+        console.log('✅ Login successful, redirecting...');
         router.push('/dashboard');
       } else {
+        console.log('❌ Login failed:', result.error);
         setError(result.error || 'Login gagal');
       }
     } catch (err: any) {
+      console.error('🔐 Login error:', err);
       setError(err.response?.data?.message || 'Terjadi kesalahan saat login');
     } finally {
       setLoading(false);
