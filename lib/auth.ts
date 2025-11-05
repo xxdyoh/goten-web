@@ -1,13 +1,33 @@
 import { api } from './api';
 
+export interface User {
+  kar_nik: string;
+  kar_nama: string;
+  kar_kd_unit: string;
+}
+
+export interface AuthResult {
+  success: boolean;
+  user?: User;
+  error?: string;
+}
+
+export interface AuthCheckResult {
+  authenticated: boolean;
+  user?: User;
+}
+
 class AuthService {
+  // ✅ DECLARE PROPERTIES DI SINI
+  private tokenKey: string;
+  private userKey: string;
+
   constructor() {
     this.tokenKey = 'auth_token';
     this.userKey = 'user_data';
   }
 
-  // Login method
-  async login(kar_nik, otp, browser_info) {
+  async login(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
     try {
       const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
       
@@ -25,8 +45,7 @@ class AuthService {
     }
   }
 
-  // Check auth status - PERMANENT SESSION
-  async checkAuth() {
+  async checkAuth(): Promise<AuthCheckResult> {
     const token = this.getToken();
     const user = this.getUser();
 
@@ -47,31 +66,30 @@ class AuthService {
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      return { authenticated: true, user: this.getUser() };
+      return { authenticated: true, user: this.getUser() as User };
     }
   }
 
-  // Helper methods
-  setToken(token) {
+  setToken(token: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.tokenKey, token);
     }
   }
 
-  getToken() {
+  getToken(): string | null {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(this.tokenKey);
     }
     return null;
   }
 
-  setUser(user) {
+  setUser(user: User): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.userKey, JSON.stringify(user));
     }
   }
 
-  getUser() {
+  getUser(): User | null {
     if (typeof window !== 'undefined') {
       const userData = localStorage.getItem(this.userKey);
       return userData ? JSON.parse(userData) : null;
@@ -79,15 +97,14 @@ class AuthService {
     return null;
   }
 
-  clearAuth() {
+  clearAuth(): void {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.tokenKey);
       localStorage.removeItem(this.userKey);
     }
   }
 
-  // Logout
-  async logout() {
+  async logout(): Promise<void> {
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
         method: 'POST',

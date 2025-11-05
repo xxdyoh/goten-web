@@ -41,7 +41,12 @@ export default function DashboardClient() {
       return;
     }
     
-    setUser(result.user);
+    // ✅ FIX: Handle undefined case
+    if (result.user) {
+      setUser(result.user);
+    } else {
+      setUser(null);
+    }
   };
 
   const loadUserData = async () => {
