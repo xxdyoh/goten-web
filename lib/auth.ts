@@ -18,16 +18,11 @@ export interface AuthCheckResult {
 }
 
 class AuthService {
-  // ✅ DECLARE PROPERTIES DI SINI
-  private tokenKey: string;
-  private userKey: string;
+  private tokenKey = 'auth_token';
+  private userKey = 'user_data';
 
-  constructor() {
-    this.tokenKey = 'auth_token';
-    this.userKey = 'user_data';
-  }
-
-  async login(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
+  // ✅ METHOD UNTUK DIRECT LOGIN (NIK + OTP)
+  async directLogin(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
     try {
       const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
       
