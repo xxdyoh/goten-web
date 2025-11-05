@@ -53,8 +53,7 @@ export default function AttendanceButtons({
                 ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                 : isWithinRange
                 ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-green-600 text-white hover:bg-green-700'
-                //: 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
             {isCheckingIn ? (
@@ -73,8 +72,7 @@ export default function AttendanceButtons({
                 ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
                 : isWithinRange
                 ? 'bg-orange-600 text-white hover:bg-orange-700'
-                : 'bg-orange-600 text-white hover:bg-orange-700'
-                //: 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
             {isCheckingOut ? (

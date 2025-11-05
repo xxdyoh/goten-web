@@ -8,6 +8,7 @@ import AttendanceStatus from '@/components/attendance/AttendanceStatus';
 import AttendanceButtons from '@/components/attendance/AttendanceButtons';
 import { api } from '@/lib/api';
 import { calculateDistance } from '@/lib/utils';
+import { authService } from '@/lib/auth';
 import { User as UserType, Unit } from '@/types';
 
 interface TodayAttendance {
@@ -32,36 +33,37 @@ export default function DashboardClient() {
     getCurrentLocation();
   }, []);
 
-  const checkAuth = () => {
-    const token = localStorage.getItem('auth_token');
-    const userData = localStorage.getItem('user_data');
+  const checkAuth = async () => {
+    const result = await authService.checkAuth();
     
-    if (!token || !userData) {
+    if (!result.authenticated) {
       router.push('/login');
       return;
     }
-
-    setUser(JSON.parse(userData));
+    
+    setUser(result.user);
   };
 
   const loadUserData = async () => {
     try {
-      const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+      const userData = authService.getUser();
       
-      // Get unit data
-      const unitResponse = await api.getUnitData(userData.kar_kd_unit);
-      if (unitResponse.success) {
-        setUnit(unitResponse.data[0]);
+      if (userData && userData.kar_kd_unit) {
+        const unitResponse = await api.getUnitData(userData.kar_kd_unit);
+        if (unitResponse.success) {
+          setUnit(unitResponse.data[0]);
+        }
       }
 
-      // Get today's attendance
-      const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
-      if (attendanceResponse.success && attendanceResponse.data.length > 0) {
-        const attendance = attendanceResponse.data[0];
-        setTodayAttendance({
-          checkInTime: attendance._IN,
-          checkOutTime: attendance._OUT
-        });
+      if (userData && userData.kar_nama) {
+        const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
+        if (attendanceResponse.success && attendanceResponse.data.length > 0) {
+          const attendance = attendanceResponse.data[0];
+          setTodayAttendance({
+            checkInTime: attendance._IN,
+            checkOutTime: attendance._OUT
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -117,7 +119,6 @@ export default function DashboardClient() {
         longitude: userLocation.lng.toString()
       });
 
-      // Refresh today's attendance
       await loadUserData();
       alert('Check In berhasil!');
     } catch (error) {
@@ -144,7 +145,6 @@ export default function DashboardClient() {
         longitude: userLocation.lng.toString()
       });
 
-      // Refresh today's attendance
       await loadUserData();
       alert('Check Out berhasil!');
     } catch (error) {
@@ -155,9 +155,8 @@ export default function DashboardClient() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
+  const handleLogout = async () => {
+    await authService.logout();
     router.push('/login');
   };
 
@@ -245,7 +244,7 @@ export default function DashboardClient() {
               </div>
             </div>
 
-            {/* Attendance History (akan diimplement nanti) */}
+            {/* Attendance History */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
                 Riwayat Absensi

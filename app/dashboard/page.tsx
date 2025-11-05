@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 
-// Disable SSR untuk dashboard - render hanya di client side
 const DashboardClient = dynamic(() => import('./DashboardClient'), {
   ssr: false,
   loading: () => (

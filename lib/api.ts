@@ -20,6 +20,14 @@ export const api = {
     return response.data;
   },
 
+  // Verify token endpoint
+  async verifyToken(token: string) {
+    const response = await axios.post(`${API_BASE_URL}/auth/verify-token`, {
+      token
+    });
+    return response.data;
+  },
+
   // Unit endpoints
   async getUnitData(kd_unit: string) {
     const response = await axios.get(`${API_BASE_URL}/unit/${kd_unit}`);
