@@ -266,19 +266,19 @@ export default function DashboardClient() {
                 <Building2 className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Sistem Absensi</h1>
-                <p className="text-sm text-gray-600">PT Bumi Sarana Maju</p>
+                <h1 className="text-xl font-bold text-gray-900">GOTEN</h1>
+                {/* <p className="text-sm text-gray-600">PT Bumi Sarana Maju</p> */}
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="font-medium text-gray-900">{user.kar_nama}</p>
-                <p className="text-sm text-gray-600">{unit.nm_unit}</p>
-              </div>
-              <div className="bg-gray-100 p-2 rounded-full">
-                <User className="w-5 h-5 text-gray-600" />
-              </div>
+                {/* <div className="text-right">
+                    <p className="font-medium text-gray-900">{user.kar_nama}</p>
+                    <p className="text-sm text-gray-600">{unit.nm_unit}</p>
+                </div>
+                <div className="bg-gray-100 p-2 rounded-full">
+                    <User className="w-5 h-5 text-gray-600" />
+                </div> */}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"

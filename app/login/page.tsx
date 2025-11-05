@@ -28,16 +28,12 @@ export default function Login() {
 
     try {
       const browserInfo = getBrowserInfo();
-      console.log('🔐 Attempting login with:', { karNik, otp, browserInfo });
       
       const result = await authService.directLogin(karNik, otp, browserInfo);
-      console.log('🔐 Login result:', result);
 
       if (result.success) {
-        console.log('✅ Login successful, redirecting...');
         router.push('/dashboard');
       } else {
-        console.log('❌ Login failed:', result.error);
         setError(result.error || 'Login gagal');
       }
     } catch (err: any) {
@@ -58,12 +54,12 @@ export default function Login() {
               <Clock className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Sistem Absensi</h2>
-          <p className="mt-2 text-gray-600">PT Bumi Sarana Maju</p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
+          <h2 className="text-3xl font-bold text-gray-900">GOTEN</h2>
+          {/* <p className="mt-2 text-gray-600">PT Bumi Sarana Maju</p> */}
+          {/* <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
             <Smartphone className="w-4 h-4" />
             <span>Gunakan OTP dari Zoro App</span>
-          </div>
+          </div> */}
         </div>
 
         {/* Login Form */}
@@ -109,9 +105,9 @@ export default function Login() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
                 placeholder="000000"
               />
-              <p className="mt-1 text-sm text-gray-500">
+              {/* <p className="mt-1 text-sm text-gray-500">
                 6 digit OTP dari Zoro App (expired 1 menit)
-              </p>
+              </p> */}
             </div>
           </div>
 
@@ -120,7 +116,7 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
           >
-            {loading ? 'Memproses Login...' : 'Masuk ke Sistem'}
+            {loading ? 'Memproses Login...' : 'Login'}
           </button>
         </form>
 
