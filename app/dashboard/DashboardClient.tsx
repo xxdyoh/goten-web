@@ -9,7 +9,7 @@ import AttendanceButtons from '@/components/attendance/AttendanceButtons';
 import { api } from '@/lib/api';
 import { calculateDistance } from '@/lib/utils';
 import { authService } from '@/lib/auth';
-import { User as UserType, Unit } from '@/types';
+import { User as UserType, Unit, RotiQUnit } from '@/types';
 
 interface TodayAttendance {
   checkInTime?: string;
@@ -27,6 +27,10 @@ export default function DashboardClient() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [rotiQUnits, setRotiQUnits] = useState<RotiQUnit[]>([]);
+  const [selectedRotiQUnit, setSelectedRotiQUnit] = useState<RotiQUnit | null>(null);
+  const [isRotiQEmployee, setIsRotiQEmployee] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -67,7 +71,17 @@ export default function DashboardClient() {
         console.log('Unit response:', unitResponse);
         
         if (unitResponse.success && unitResponse.data && unitResponse.data.length > 0) {
-          setUnit(unitResponse.data[0]);
+          const unitData = unitResponse.data[0];
+          setUnit(unitData);
+          
+          // Cek apakah karyawan RotiQ
+          const isRotiQ = unitData.nm_unit.toLowerCase().includes('rotiq');
+          setIsRotiQEmployee(isRotiQ);
+          
+          // Jika karyawan RotiQ, load daftar unit RotiQ
+          if (isRotiQ) {
+            await loadRotiQUnits(unitData);
+          }
         } else {
           setError('Data unit tidak ditemukan');
         }
@@ -92,6 +106,45 @@ export default function DashboardClient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadRotiQUnits = async (currentUnit: Unit) => {
+    try {
+      const response = await api.getRotiQUnits();
+      console.log('RotiQ units response:', response);
+      
+      if (response.success && response.data) {
+        const units = response.data.map((item: any) => ({
+          kd_unit: item.kd_unit,
+          nm_unit: item.nm_unit,
+          latitude: parseFloat(item.latitude),
+          longitude: parseFloat(item.longitude)
+        }));
+        
+        setRotiQUnits(units);
+        
+        // Set unit default (unit karyawan atau pertama)
+        let defaultUnit = units.find((u: RotiQUnit) => u.kd_unit === currentUnit.kd_unit);
+        if (!defaultUnit && units.length > 0) {
+          defaultUnit = units[0];
+        }
+        
+        if (defaultUnit) {
+          setSelectedRotiQUnit(defaultUnit);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading RotiQ units:', error);
+    }
+  };
+
+  const handleRotiQUnitChange = (unit: RotiQUnit) => {
+    setSelectedRotiQUnit(unit);
+    // Update map location ke unit terpilih
+    setUserLocation({
+      lat: unit.latitude,
+      lng: unit.longitude
+    });
   };
 
   const getCurrentLocation = () => {
@@ -246,11 +299,15 @@ export default function DashboardClient() {
     );
   }
 
-  const distance = unit ? calculateDistance(
+  const effectiveUnit = isRotiQEmployee && selectedRotiQUnit 
+    ? { ...selectedRotiQUnit, latitude: selectedRotiQUnit.latitude, longitude: selectedRotiQUnit.longitude }
+    : unit;
+
+  const distance = effectiveUnit ? calculateDistance(
     userLocation.lat,
     userLocation.lng,
-    unit.latitude,
-    unit.longitude
+    effectiveUnit.latitude,
+    effectiveUnit.longitude
   ) : 0;
 
   const isWithinRange = distance <= 500;
@@ -303,7 +360,14 @@ export default function DashboardClient() {
               </h2>
               <LocationMap
                 userLocation={userLocation}
-                officeLocation={{ lat: unit.latitude, lng: unit.longitude }}
+                officeLocation={{
+                  lat: effectiveUnit?.latitude || -7.538982,
+                  lng: effectiveUnit?.longitude || 110.844009
+                }}
+                rotiQLocation={isRotiQEmployee && selectedRotiQUnit ? {
+                  lat: selectedRotiQUnit.latitude,
+                  lng: selectedRotiQUnit.longitude
+                } : undefined}
                 height="400px"
               />
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
@@ -331,6 +395,48 @@ export default function DashboardClient() {
 
           {/* Right Column - Attendance Actions */}
           <div className="space-y-8">
+            {isRotiQEmployee && rotiQUnits.length > 0 && (
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Building2 className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-800">Lokasi RotiQ Saat Ini</h3>
+                    <p className="text-sm text-gray-600">Pilih unit RotiQ untuk absensi</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <select
+                    value={selectedRotiQUnit?.kd_unit || ''}
+                    onChange={(e) => {
+                      const unit = rotiQUnits.find(u => u.kd_unit === e.target.value);
+                      if (unit) handleRotiQUnitChange(unit);
+                    }}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                  >
+                    {rotiQUnits.map((unit) => (
+                      <option key={unit.kd_unit} value={unit.kd_unit}>
+                        {unit.nm_unit}
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {selectedRotiQUnit && (
+                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <p className="text-sm text-orange-800">
+                        <span className="font-medium">Unit terpilih:</span> {selectedRotiQUnit.nm_unit}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Koordinat: {selectedRotiQUnit.latitude.toFixed(6)}, {selectedRotiQUnit.longitude.toFixed(6)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <AttendanceStatus
               checkInTime={todayAttendance.checkInTime}
               checkOutTime={todayAttendance.checkOutTime}
@@ -348,6 +454,7 @@ export default function DashboardClient() {
               hasCheckedIn={!!todayAttendance.checkInTime}
               hasCheckedOut={!!todayAttendance.checkOutTime}
               isWithinRange={isWithinRange}
+              isRotiQEmployee={isRotiQEmployee}
             />
 
             {/* User Info Card */}

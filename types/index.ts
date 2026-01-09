@@ -22,6 +22,13 @@ export interface Unit {
   longitude: number;
 }
 
+export interface RotiQUnit {
+  kd_unit: string;
+  nm_unit: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface BrowserInfo {
   userAgent: string;
   platform: string;

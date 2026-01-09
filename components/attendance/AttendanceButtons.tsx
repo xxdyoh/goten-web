@@ -13,6 +13,7 @@ interface AttendanceButtonsProps {
   hasCheckedIn: boolean;
   hasCheckedOut: boolean;
   isWithinRange: boolean;
+  isRotiQEmployee?: boolean; // ← TAMBAHKAN INI
 }
 
 export default function AttendanceButtons({
@@ -24,7 +25,8 @@ export default function AttendanceButtons({
   isRefreshingLocation,
   hasCheckedIn,
   hasCheckedOut,
-  isWithinRange
+  isWithinRange,
+  isRotiQEmployee = false // ← TAMBAHKAN DEFAULT VALUE
 }: AttendanceButtonsProps) {
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
@@ -88,7 +90,7 @@ export default function AttendanceButtons({
       {!isWithinRange && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-700 text-center">
-            Anda berada di luar jangkauan 500 meter dari kantor. 
+            Anda berada di luar jangkauan 500 meter dari {isRotiQEmployee ? 'unit RotiQ terpilih' : 'kantor'}. 
             Tidak dapat melakukan absensi.
           </p>
         </div>

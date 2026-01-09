@@ -58,5 +58,10 @@ export const api = {
       kar_nama
     });
     return response.data;
-  }
+  },
+
+  async getRotiQUnits() {
+    const response = await axios.get(`${API_BASE_URL}/unitrotiq`);
+    return response.data;
+  },
 };

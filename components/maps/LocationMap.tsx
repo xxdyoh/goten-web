@@ -16,9 +16,15 @@ interface LocationMapProps {
   userLocation: { lat: number; lng: number };
   officeLocation: { lat: number; lng: number };
   height?: string;
+  rotiQLocation?: { lat: number; lng: number }; // ← TAMBAHKAN INI
 }
 
-export default function LocationMap({ userLocation, officeLocation, height = '400px' }: LocationMapProps) {
+export default function LocationMap({ 
+  userLocation, 
+  officeLocation, 
+  rotiQLocation,  // ← TAMBAHKAN PARAMETER INI
+  height = '400px' 
+}: LocationMapProps) {
   const mapRef = useRef<L.Map>(null);
 
   useEffect(() => {
@@ -45,6 +51,15 @@ export default function LocationMap({ userLocation, officeLocation, height = '40
     shadowSize: [41, 41]
   });
 
+  const rotiQIcon = new L.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+
   return (
     <div className="rounded-lg overflow-hidden shadow-lg" style={{ height }}>
       <MapContainer
@@ -63,6 +78,11 @@ export default function LocationMap({ userLocation, officeLocation, height = '40
         <Marker position={[officeLocation.lat, officeLocation.lng]} icon={officeIcon}>
           <Popup>Lokasi Kantor</Popup>
         </Marker>
+        {rotiQLocation && (
+          <Marker position={[rotiQLocation.lat, rotiQLocation.lng]} icon={rotiQIcon}>
+            <Popup>Lokasi RotiQ Terpilih</Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );
