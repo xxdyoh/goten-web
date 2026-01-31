@@ -22,22 +22,70 @@ class AuthService {
   private userKey = 'user_data';
 
   async directLogin(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
-    try {
-      const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
-      
-      if (data.success) {
-        this.setToken(data.token);
-        this.setUser(data.user);
-        return { success: true, user: data.user };
-      } else {
-        this.clearAuth();
-        return { success: false, error: data.message };
-      }
-    } catch (error) {
+  try {
+    const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
+    
+    if (data.success) {
+      this.setToken(data.token);
+      this.setUser(data.user);
+      return { success: true, user: data.user };
+    } else {
       this.clearAuth();
-      return { success: false, error: 'Network error' };
+      // Jika backend mengembalikan error message
+      return { 
+        success: false, 
+        error: data.message || 'Login gagal' 
+      };
+    }
+  } catch (error: any) {
+    this.clearAuth();
+    
+    console.error('Login error details:', error);
+    
+    // Cek jika error dari axios response (backend error)
+    if (error.response) {
+      // Backend merespon dengan status error (400, 401, 500, dll)
+      const status = error.response.status;
+      const errorData = error.response.data;
+      
+      let errorMessage = 'Terjadi kesalahan pada server';
+      
+      if (status === 401) {
+        errorMessage = 'NIK atau OTP salah';
+      } else if (status === 400) {
+        errorMessage = errorData.message || 'Data tidak valid';
+      } else if (status === 404) {
+        errorMessage = 'Endpoint API tidak ditemukan';
+      } else if (status === 500) {
+        errorMessage = 'Server sedang mengalami masalah';
+      } else if (errorData && errorData.message) {
+        errorMessage = errorData.message;
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage 
+      };
+    } 
+    // Cek jika error dari request (network error)
+    else if (error.request) {
+      // Request dikirim tapi tidak ada response (network error)
+      console.error('Network error - No response received:', error.request);
+      return { 
+        success: false, 
+        error: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.' 
+      };
+    } 
+    // Error lainnya
+    else {
+      console.error('Other error:', error.message);
+      return { 
+        success: false, 
+        error: error.message || 'Terjadi kesalahan tidak diketahui' 
+      };
     }
   }
+}
 
   async checkAuth(): Promise<AuthCheckResult> {
     const token = this.getToken();
