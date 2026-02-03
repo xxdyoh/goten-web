@@ -76,14 +76,15 @@ export default function Login() {
                 NIK Karyawan
               </label>
               <input
-                id="karNik"
-                type="text"
-                required
-                value={karNik}
-                onChange={(e) => setKarNik(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Masukkan NIK Anda"
-              />
+              id="karNik"
+              type="text"
+              required
+              value={karNik}
+              onChange={(e) => setKarNik(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
+              placeholder="Masukkan NIK Anda"
+            />
+
             </div>
 
             <div>
@@ -96,15 +97,15 @@ export default function Login() {
                 )}
               </label>
               <input
-                id="otp"
-                type="text"
-                required
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest"
-                placeholder="000000"
-              />
+  id="otp"
+  type="text"
+  required
+  maxLength={6}
+  value={otp}
+  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest text-black"
+  placeholder="000000"
+/>
               {/* <p className="mt-1 text-sm text-gray-500">
                 6 digit OTP dari Zoro App (expired 1 menit)
               </p> */}
