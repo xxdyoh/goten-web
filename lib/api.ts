@@ -11,6 +11,14 @@ export const api = {
     return response.data;
   },
 
+  async login(kar_nik: string, password: string) {
+    const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+      kar_nik,
+      password
+    });
+    return response.data;
+  },
+
   async verifyOTPLogin(kar_nik: string, otp: string, browser_info: any) {
     const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
       kar_nik,
@@ -62,6 +70,43 @@ export const api = {
 
   async getRotiQUnits() {
     const response = await axios.get(`${API_BASE_URL}/unitrotiq`);
+    return response.data;
+  },
+
+  // POD endpoints
+  async getPOD(data: { kar_nik: string; start_date?: string; end_date?: string }) {
+    const response = await axios.post(`${API_BASE_URL}/pod/list`, data);
+    return response.data;
+  },
+
+  async cariDO(data: { kar_nik: string; start_date?: string; keyword?: string }) {
+    const response = await axios.post(`${API_BASE_URL}/pod/cari-do`, data);
+    return response.data;
+  },
+
+  async tambahPOD(data: {
+    kar_nik: string;
+    pod_do_nomor: string;
+    pod_tanggal: string;
+    pod_foto: string;
+    pod_cus_kode: string;
+  }) {
+    const response = await axios.post(`${API_BASE_URL}/pod/tambah`, data);
+    return response.data;
+  },
+
+  async editPOD(data: {
+    kar_nik: string;
+    pod_nomor: string;
+    pod_tanggal: string;
+    pod_foto?: string;
+  }) {
+    const response = await axios.post(`${API_BASE_URL}/pod/edit`, data);
+    return response.data;
+  },
+
+  async hapusPOD(data: { kar_nik: string; pod_nomor: string }) {
+    const response = await axios.post(`${API_BASE_URL}/pod/hapus`, data);
     return response.data;
   },
 };

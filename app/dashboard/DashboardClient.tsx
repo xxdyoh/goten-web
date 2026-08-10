@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Building2, AlertCircle } from 'lucide-react';
+import { LogOut, User, Building2, AlertCircle, FileCheck } from 'lucide-react';
 import LocationMap from '@/components/maps/LocationMap';
 import AttendanceStatus from '@/components/attendance/AttendanceStatus';
 import AttendanceButtons from '@/components/attendance/AttendanceButtons';
@@ -456,6 +456,19 @@ export default function DashboardClient() {
               isWithinRange={isWithinRange}
               isRotiQEmployee={isRotiQEmployee}
             />
+
+            {/* POD Menu Button - hanya untuk jabatan 21 atau 30 */}
+            {(user.kar_kd_jabat === '21' || user.kar_kd_jabat === '30') && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <button
+                  onClick={() => router.push('/pod')}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  <FileCheck className="w-5 h-5" />
+                  <span className="font-medium">Proof of Delivery</span>
+                </button>
+              </div>
+            )}
 
             {/* User Info Card */}
             <div className="bg-white rounded-xl shadow-lg p-6">

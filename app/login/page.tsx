@@ -1,25 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, Smartphone } from 'lucide-react';
+import { Clock, Lock } from 'lucide-react';
 import { authService } from '@/lib/auth';
-import { getBrowserInfo } from '@/lib/utils';
 
 export default function Login() {
   const [karNik, setKarNik] = useState('');
-  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [timeLeft, setTimeLeft] = useState(0);
   const router = useRouter();
-
-  useEffect(() => {
-    if (timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [timeLeft]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +18,7 @@ export default function Login() {
     setError('');
 
     try {
-      const browserInfo = getBrowserInfo();
-      
-      const result = await authService.directLogin(karNik, otp, browserInfo);
+      const result = await authService.directLogin(karNik, password);
 
       if (result.success) {
         router.push('/dashboard');
@@ -37,7 +26,7 @@ export default function Login() {
         setError(result.error || 'Login gagal');
       }
     } catch (err: any) {
-      console.error('🔐 Login error:', err);
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Terjadi kesalahan saat login');
     } finally {
       setLoading(false);
@@ -55,11 +44,6 @@ export default function Login() {
             </div>
           </div>
           <h2 className="text-3xl font-bold text-gray-900">GOTEN</h2>
-          {/* <p className="mt-2 text-gray-600">PT Bumi Sarana Maju</p> */}
-          {/* <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
-            <Smartphone className="w-4 h-4" />
-            <span>Gunakan OTP dari Zoro App</span>
-          </div> */}
         </div>
 
         {/* Login Form */}
@@ -76,39 +60,29 @@ export default function Login() {
                 NIK Karyawan
               </label>
               <input
-              id="karNik"
-              type="text"
-              required
-              value={karNik}
-              onChange={(e) => setKarNik(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
-              placeholder="Masukkan NIK Anda"
-            />
-
+                id="karNik"
+                type="text"
+                required
+                value={karNik}
+                onChange={(e) => setKarNik(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
+                placeholder="Masukkan NIK Anda"
+              />
             </div>
 
             <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                One-Time Password
-                {timeLeft > 0 && (
-                  <span className="ml-2 text-orange-600 font-semibold">
-                    ({timeLeft}s)
-                  </span>
-                )}
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                Password
               </label>
               <input
-  id="otp"
-  type="text"
-  required
-  maxLength={6}
-  value={otp}
-  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-center text-lg font-mono tracking-widest text-black"
-  placeholder="000000"
-/>
-              {/* <p className="mt-1 text-sm text-gray-500">
-                6 digit OTP dari Zoro App (expired 1 menit)
-              </p> */}
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
+                placeholder="Masukkan password"
+              />
             </div>
           </div>
 
@@ -123,7 +97,10 @@ export default function Login() {
 
         {/* Info */}
         <div className="text-center text-sm text-gray-500">
-          <p>Hubungi tim IT untuk mendapatkan OTP</p>
+          <p className="flex items-center justify-center gap-1">
+            <Lock className="w-3 h-3" />
+            Gunakan NIK dan password Anda
+          </p>
         </div>
       </div>
     </div>

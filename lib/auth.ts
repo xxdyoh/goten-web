@@ -4,6 +4,7 @@ export interface User {
   kar_nik: string;
   kar_nama: string;
   kar_kd_unit: string;
+  kar_kd_jabat?: string;
 }
 
 export interface AuthResult {
@@ -21,9 +22,9 @@ class AuthService {
   private tokenKey = 'auth_token';
   private userKey = 'user_data';
 
-  async directLogin(kar_nik: string, otp: string, browser_info: any): Promise<AuthResult> {
+  async directLogin(kar_nik: string, password: string): Promise<AuthResult> {
   try {
-    const data = await api.verifyOTPLogin(kar_nik, otp, browser_info);
+    const data = await api.login(kar_nik, password);
     
     if (data.success) {
       this.setToken(data.token);
