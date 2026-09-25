@@ -6,23 +6,57 @@
 
 :root {
   color-scheme: light;
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 255, 255, 255;
+  --primary: #3b6df0;
+  --primary-600: #2f5be0;
+  --primary-700: #2446b8;
+  --primary-50: #eef2fe;
+  --success: #00a86b;
+  --success-600: #00855a;
+  --success-50: #e4f7f0;
+  --warning: #ff8c42;
+  --warning-700: #b45309;
+  --warning-50: #fff3e8;
+  --danger: #ff5e62;
+  --danger-600: #e5484d;
+  --danger-50: #ffeeee;
+  --bg: #f0f4ff;
+  --ink: #1a2233;
+  --ink-soft: #4b5563;
+  --surface: #ffffff;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--ink);
+  background: var(--bg);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
 }
 
 .leaflet-container {
   height: 100%;
   width: 100%;
   border-radius: 0.5rem;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-gray-100 shadow-sm;
+  }
+  .field {
+    @apply w-full px-3 py-2.5 text-sm text-ink bg-white border border-gray-300 rounded-lg placeholder:text-gray-400;
+  }
+  .field-label {
+    @apply block text-sm font-medium text-ink mb-1.5;
+  }
 }

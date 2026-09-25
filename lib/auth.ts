@@ -21,151 +21,133 @@ export interface AuthCheckResult {
 class AuthService {
   private tokenKey = 'auth_token';
   private userKey = 'user_data';
+  private deviceKey = 'web_device_id';
 
-  async directLogin(kar_nik: string, password: string): Promise<AuthResult> {
-  try {
-    const data = await api.login(kar_nik, password);
-    
-    if (data.success) {
-      this.setToken(data.token);
-      this.setUser(data.user);
-      return { success: true, user: data.user };
-    } else {
-      this.clearAuth();
-      // Jika backend mengembalikan error message
-      return { 
-        success: false, 
-        error: data.message || 'Login gagal' 
-      };
+  // Identitas browser (perangkat). Dibuat sekali, ikut semua panggilan auth.
+  getDeviceId(): string {
+    if (typeof window === 'undefined') return '';
+    let deviceId = window.localStorage.getItem(this.deviceKey);
+    if (!deviceId) {
+      deviceId =
+        typeof window.crypto?.randomUUID === 'function'
+          ? window.crypto.randomUUID()
+          : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 12)}`;
+      window.localStorage.setItem(this.deviceKey, deviceId);
     }
-  } catch (error: any) {
-    this.clearAuth();
-    
-    console.error('Login error details:', error);
-    
-    // Cek jika error dari axios response (backend error)
-    if (error.response) {
-      // Backend merespon dengan status error (400, 401, 500, dll)
-      const status = error.response.status;
-      const errorData = error.response.data;
-      
-      let errorMessage = 'Terjadi kesalahan pada server';
-      
-      if (status === 401) {
-        errorMessage = 'NIK atau OTP salah';
-      } else if (status === 400) {
-        errorMessage = errorData.message || 'Data tidak valid';
-      } else if (status === 404) {
-        errorMessage = 'Endpoint API tidak ditemukan';
-      } else if (status === 500) {
-        errorMessage = 'Server sedang mengalami masalah';
-      } else if (errorData && errorData.message) {
-        errorMessage = errorData.message;
+    return deviceId;
+  }
+
+  async login(kar_nik: string, password: string): Promise<AuthResult> {
+    try {
+      const data = await api.login(kar_nik, password, this.getDeviceId());
+
+      if (data.success) {
+        this.setToken(data.token);
+        this.setUser(data.user);
+        return { success: true, user: data.user };
       }
-      
-      return { 
-        success: false, 
-        error: errorMessage 
-      };
-    } 
-    // Cek jika error dari request (network error)
-    else if (error.request) {
-      // Request dikirim tapi tidak ada response (network error)
-      console.error('Network error - No response received:', error.request);
-      return { 
-        success: false, 
-        error: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.' 
-      };
-    } 
-    // Error lainnya
-    else {
-      console.error('Other error:', error.message);
-      return { 
-        success: false, 
-        error: error.message || 'Terjadi kesalahan tidak diketahui' 
-      };
+
+      this.clearAuth();
+      return { success: false, error: data.message || 'Login gagal' };
+    } catch (error: any) {
+      this.clearAuth();
+      console.error('Login error details:', error);
+
+      if (error.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+
+        let errorMessage = 'Terjadi kesalahan pada server';
+
+        if (status === 401) {
+          errorMessage = 'NIK atau password salah';
+        } else if (status === 403) {
+          errorMessage = errorData?.message || 'Perangkat ini sudah terikat akun lain';
+        } else if (status === 400) {
+          errorMessage = errorData?.message || 'Data tidak valid';
+        } else if (status === 404) {
+          errorMessage = 'Endpoint API tidak ditemukan';
+        } else if (status === 500) {
+          errorMessage = 'Server sedang mengalami masalah';
+        } else if (errorData && errorData.message) {
+          errorMessage = errorData.message;
+        }
+
+        return { success: false, error: errorMessage };
+      } else if (error.request) {
+        console.error('Network error - No response received:', error.request);
+        return {
+          success: false,
+          error: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
+        };
+      } else {
+        console.error('Other error:', error.message);
+        return {
+          success: false,
+          error: error.message || 'Terjadi kesalahan tidak diketahui',
+        };
+      }
     }
   }
-}
 
   async checkAuth(): Promise<AuthCheckResult> {
     const token = this.getToken();
     const user = this.getUser();
 
-    console.log('🔐 Check Auth - Token:', token, 'User:', user);
-
     if (!token || !user) {
-      console.log('❌ Auth failed: No token or user');
       this.clearAuth();
       return { authenticated: false };
     }
 
     try {
-      const data = await api.verifyToken(token);
+      const data = await api.verifyToken(token, this.getDeviceId());
 
       if (data.success) {
-        console.log('✅ Token valid, user:', data.user);
         this.setUser(data.user);
         return { authenticated: true, user: data.user };
-      } else {
-        console.log('❌ Token invalid');
-        this.clearAuth();
-        return { authenticated: false };
       }
+
+      // Token mati (sesi dipakai perangkat lain / sudah logout) -> keluarkan
+      this.clearAuth();
+      return { authenticated: false };
     } catch (error) {
       console.error('Auth check failed:', error);
-      // Fallback: check if we have valid user data
-      if (user) {
-        console.log('⚠️ Using fallback auth with local user data');
-        return { authenticated: true, user: user };
-      } else {
-        this.clearAuth();
-        return { authenticated: false };
-      }
+      // Kegagalan auth = tidak login. Tanpa fallback: perangkat yang dikick tidak bisa lolos lagi.
+      this.clearAuth();
+      return { authenticated: false };
     }
   }
 
   setToken(token: string): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(this.tokenKey, token);
-      console.log('💾 Token saved:', token);
+      window.localStorage.setItem(this.tokenKey, token);
     }
   }
 
   getToken(): string | null {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem(this.tokenKey);
-      console.log('🔑 Token retrieved:', token);
-      return token;
+      return window.localStorage.getItem(this.tokenKey);
     }
     return null;
   }
 
   setUser(user: User): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(this.userKey, JSON.stringify(user));
-      console.log('👤 User saved:', user);
+      window.localStorage.setItem(this.userKey, JSON.stringify(user));
     }
   }
 
   getUser(): User | null {
     if (typeof window !== 'undefined') {
       try {
-        const userData = localStorage.getItem(this.userKey);
-        console.log('📥 Raw user data from localStorage:', userData);
-        
-        if (!userData || userData === 'undefined' || userData === 'null') {
-          console.log('❌ No valid user data found');
+        const raw = window.localStorage.getItem(this.userKey);
+        if (!raw || raw === 'undefined' || raw === 'null') {
           return null;
         }
-        
-        const parsedUser = JSON.parse(userData);
-        console.log('✅ User parsed successfully:', parsedUser);
-        return parsedUser;
+        return JSON.parse(raw);
       } catch (error) {
-        console.error('❌ Error parsing user data:', error);
-        // Clear invalid data
-        localStorage.removeItem(this.userKey);
+        console.error('Error parsing user data:', error);
+        window.localStorage.removeItem(this.userKey);
         return null;
       }
     }
@@ -174,16 +156,17 @@ class AuthService {
 
   clearAuth(): void {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(this.tokenKey);
-      localStorage.removeItem(this.userKey);
-      console.log('🗑️ Auth data cleared');
+      window.localStorage.removeItem(this.tokenKey);
+      window.localStorage.removeItem(this.userKey);
     }
   }
 
   async logout(): Promise<void> {
+    const token = this.getToken();
     try {
-      // Skip backend logout if endpoint doesn't exist (404 error)
-      console.log('🚪 Logging out...');
+      if (token) {
+        await api.logout(token);
+      }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -192,5 +175,4 @@ class AuthService {
   }
 }
 
-// ✅ HANYA SATU EXPORT INI
 export const authService = new AuthService();

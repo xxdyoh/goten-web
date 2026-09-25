@@ -44,3 +44,43 @@ export function calculateDistance(
 
   return R * c; // meters
 }
+
+const namaBulan: string[] = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const namaHari: string[] = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+// "2025-09-25 07:12:33" dan jam "07:12:33" sama-sama aman dipakai.
+function tokenJam(v?: string): string | null {
+  if (!v) return null;
+  const t = v.split(' ').pop() ?? '';
+  if (/\d{2}:\d{2}/.test(t)) return t.slice(0, 5);
+  return null;
+}
+
+export function jamSaja(v?: string): string {
+  return tokenJam(v) ?? '--:--';
+}
+
+export function tanggalPanjang(dt: string): string {
+  const d = new Date(dt.replace(' ', 'T') + (dt.includes(' ') ? '' : 'T00:00:00'));
+  if (isNaN(d.getTime())) return dt;
+  return `${d.getDate()} ${namaBulan[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+export function tanggalHari(tanggal: string): string {
+  const d = new Date(tanggal.replace(' ', 'T'));
+  if (isNaN(d.getTime())) return tanggal;
+  return `${namaHari[d.getDay()]}, ${tanggalPanjang(tanggal)}`;
+}
+
+// Rentang default: awal bulan tahun berjalan sampai hari ini (untuk filter laporan).
+export function rentangDefaultAwal(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-01-01`;
+}
+
+export function tanggalHariIni(): string {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${m}-${d}`;
+}

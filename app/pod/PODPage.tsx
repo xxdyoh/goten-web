@@ -1,71 +1,82 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { FileText, Upload, Search, Plus, Trash2, Calendar, FileCheck, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { FileText, Upload, Search, Plus, Trash2, X, Truck, AlertCircle } from 'lucide-react';
+import AppShell, { useAppUser } from '@/components/AppShell';
+import { EmptyState, LoadingState, ErrorState } from '@/components/ui/PageStates';
+import { useToast } from '@/components/ui/ToastProvider';
 import { api } from '@/lib/api';
-import { authService } from '@/lib/auth';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { POD } from '@/types';
+import { tanggalPanjang, tanggalHariIni } from '@/lib/utils';
 
 export default function PODPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const user = useAppUser();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [podList, setPodList] = useState<POD[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = tanggalHariIni();
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [showForm, setShowForm] = useState(false);
   const [selectedDO, setSelectedDO] = useState<any>(null);
   const [showDOModal, setShowDOModal] = useState(false);
-  const [podTanggal, setPodTanggal] = useState('');
+  const [podTanggal, setPodTanggal] = useState(today);
   const [podFoto, setPodFoto] = useState<File | null>(null);
   const [podFotoPreview, setPodFotoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const loadedRef = useRef(false);
+
+  const loadPOD = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await api.getPOD({
+        kar_nik: user.kar_nik,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+      if (res.success) setPodList(res.data || []);
+      else setError(true);
+    } catch (e) {
+      console.error('Error load POD:', e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const result = await authService.checkAuth();
-        if (!result.authenticated) {
-          router.push('/login');
-          return;
-        }
-        if (result.user) {
-          setUser(result.user);
-          const response = await api.getPOD({
-            kar_nik: result.user.kar_nik,
-            start_date: startDate,
-            end_date: endDate
-          });
-          if (response.success) setPodList(response.data || []);
-        }
-      } catch (e: any) {
-        setError('Authentication error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkAuth();
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      loadPOD();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (showDOModal && searchKeyword === '' && searchResults.length === 0) {
+      handleSearchDO('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDOModal]);
 
   const handleSearchDO = async (keyword?: string) => {
     if (!user?.kar_nik) return;
     setSearching(true);
     try {
-      const response = await api.cariDO({
+      const res = await api.cariDO({
         kar_nik: user.kar_nik,
-        start_date: startDate,
-        keyword: keyword || searchKeyword
+        start_date: startDate || undefined,
+        keyword: keyword || searchKeyword,
       });
-      if (response.success) setSearchResults(response.data || []);
+      if (res.success) setSearchResults(res.data || []);
     } catch (e) {
-      setError('Gagal mencari DO');
+      console.error('Error cari DO:', e);
+      toast.show('error', 'Gagal mencari DO');
     } finally {
       setSearching(false);
     }
@@ -76,13 +87,8 @@ export default function PODPage() {
     setSearchKeyword('');
     setSearchResults([]);
     setShowDOModal(false);
+    setPodTanggal(today);
   };
-
-  useEffect(() => {
-    if (showDOModal && searchKeyword === '' && searchResults.length === 0) {
-      handleSearchDO('');
-    }
-  }, [showDOModal]);
 
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
@@ -111,48 +117,39 @@ export default function PODPage() {
 
   const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Ukuran file maksimal 5MB');
-        return;
-      }
-      setPodFoto(file);
-      const compressed = await compressImage(file);
-      setPodFotoPreview(compressed);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.show('error', 'Ukuran file maksimal 5MB');
+      return;
     }
+    setPodFoto(file);
+    setPodFotoPreview(await compressImage(file));
   };
 
   const handleSubmit = async () => {
     if (!user?.kar_nik || !selectedDO || !podFoto) {
-      setError('Data tidak lengkap');
+      toast.show('error', 'Lengkapi DO dan foto terlebih dahulu');
       return;
     }
     setIsSubmitting(true);
     try {
-      const response = await api.tambahPOD({
+      const res = await api.tambahPOD({
         kar_nik: user.kar_nik,
         pod_do_nomor: selectedDO.Nomor,
         pod_tanggal: podTanggal,
         pod_foto: podFotoPreview || '',
-        pod_cus_kode: selectedDO.Cus_kode
+        pod_cus_kode: selectedDO.Cus_kode,
       });
-      if (response.success) {
-        alert('POD berhasil dibuat!');
-        setShowForm(false);
-        setSelectedDO(null);
-        setPodFoto(null);
-        setPodFotoPreview(null);
-        const res = await api.getPOD({
-          kar_nik: user.kar_nik,
-          start_date: startDate,
-          end_date: endDate
-        });
-        if (res.success) setPodList(res.data || []);
+      if (res.success) {
+        toast.show('success', 'POD berhasil dibuat');
+        resetForm();
+        loadPOD();
       } else {
-        setError(response.message || 'Gagal membuat POD');
+        toast.show('error', res.message || 'Gagal membuat POD');
       }
     } catch (e) {
-      setError('Gagal membuat POD');
+      console.error('Error tambah POD:', e);
+      toast.show('error', 'Gagal membuat POD');
     } finally {
       setIsSubmitting(false);
     }
@@ -160,350 +157,260 @@ export default function PODPage() {
 
   const handleDeletePOD = async (podNomor: string) => {
     if (!window.confirm('Hapus POD ini?')) return;
-    if (!user?.kar_nik) return;
     try {
-      const response = await api.hapusPOD({
-        kar_nik: user.kar_nik,
-        pod_nomor: podNomor
-      });
-      if (response.success) {
-        alert('POD dihapus!');
-        const res = await api.getPOD({
-          kar_nik: user.kar_nik,
-          start_date: startDate,
-          end_date: endDate
-        });
-        if (res.success) setPodList(res.data || []);
+      const res = await api.hapusPOD({ kar_nik: user.kar_nik, pod_nomor: podNomor });
+      if (res.success) {
+        toast.show('success', 'POD dihapus');
+        loadPOD();
       } else {
-        setError(response.message || 'Gagal menghapus POD');
+        toast.show('error', res.message || 'Gagal menghapus POD');
       }
     } catch (e) {
-      setError('Gagal menghapus POD');
+      console.error('Error hapus POD:', e);
+      toast.show('error', 'Gagal menghapus POD');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Memuat halaman POD...</p>
-        </div>
-      </div>
-    );
-  }
+  const resetForm = () => {
+    setShowForm(false);
+    setSelectedDO(null);
+    setPodFoto(null);
+    setPodFotoPreview(null);
+    setSearchKeyword('');
+    setShowDOModal(false);
+    setPodTanggal(today);
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
-            <X className="w-5 h-5" />
-            {error}
-          </div>
-          <button onClick={() => setError(null)} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg">
-            Tutup
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const toggleForm = () => {
+    if (showForm) resetForm();
+    else {
+      setShowForm(true);
+      setPodTanggal(today);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <FileCheck className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">Proof of Delivery</h1>
-            </div>
-            <button onClick={() => router.push('/dashboard')} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-              Kembali ke Dashboard
+    <AppShell title="Proof of Delivery" right={null}>
+      <div className="space-y-6">
+        {error && !loading && (
+          <div className="flex items-center gap-2 rounded-lg bg-danger-50 border border-danger-600/30 text-danger-700 px-4 py-3 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">Gagal memuat data POD.</span>
+            <button onClick={loadPOD} className="font-medium underline">
+              Muat ulang
             </button>
           </div>
-        </div>
-      </header>
+        )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-800">{showForm ? 'Tambah POD Baru' : 'Buat POD Baru'}</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-soft">
+            Dari
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-md text-sm text-ink bg-white"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-soft">
+            Sampai
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-md text-sm text-ink bg-white"
+            />
+          </label>
+          <button
+            onClick={loadPOD}
+            disabled={loading}
+            className="px-4 py-2.5 min-h-11 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50"
+          >
+            Filter
+          </button>
+          <button
+            onClick={toggleForm}
+            className="sm:ml-auto flex items-center gap-2 px-4 py-2.5 min-h-11 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showForm ? 'Tutup form' : 'Buat POD baru'}
+          </button>
+        </div>
+
+        {showForm && (
+          <div className="card p-5 space-y-4">
+            <h2 className="font-semibold text-ink">Buat POD baru</h2>
+
+            <button
+              onClick={() => setShowDOModal(true)}
+              disabled={selectedDO !== null}
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-md ${
+                selectedDO ? 'bg-gray-100 text-ink-soft' : 'bg-primary-600 text-white hover:bg-primary-700'
+              }`}
+            >
+              {selectedDO ? (
+                <>
+                  <FileText className="w-4 h-4" />
+                  <span>{selectedDO.Nomor}</span>
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  <span>Cari dan pilih DO</span>
+                </>
+              )}
+            </button>
+
+            {selectedDO && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+                  Tanggal POD
+                  <input
+                    type="date"
+                    value={podTanggal}
+                    onChange={(e) => setPodTanggal(e.target.value)}
+                    className="px-3 py-2.5 border border-gray-300 rounded-md text-sm text-ink bg-white"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm font-medium text-ink">
+                  Foto pengiriman
+                  {podFotoPreview ? (
+                    <span className="relative">
+                      <img src={podFotoPreview} alt="Pratinjau foto POD" className="w-full h-40 object-cover rounded-md border border-gray-200" />
+                      <button
+                        onClick={() => {
+                          setPodFoto(null);
+                          setPodFotoPreview(null);
+                        }}
+                        className="absolute -top-2 -right-2 p-1.5 rounded-full bg-danger-600 text-white"
+                        aria-label="Hapus foto"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-md px-4 py-8 text-sm text-ink-soft cursor-pointer hover:border-primary">
+                      <Upload className="w-4 h-4" />
+                      Pilih foto (maks 5MB)
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleFotoChange} />
+                    </span>
+                  )}
+                </label>
                 <button
-                  onClick={() => {
-                    setShowForm(!showForm);
-                    setSelectedDO(null);
-                    setPodFoto(null);
-                    setPodFotoPreview(null);
-                    setSearchKeyword('');
-                    setShowDOModal(false);
-                    setPodTanggal(today);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !podFoto}
+                  className="w-full py-3 rounded-md bg-success-600 text-white hover:bg-success-700 disabled:opacity-50"
                 >
-                  {showForm ? <X className="w-5 h-5 text-gray-600" /> : <Plus className="w-5 h-5 text-blue-600" />}
+                  {isSubmitting ? 'Memproses...' : 'Buat POD'}
                 </button>
               </div>
-
-              {showForm && (
-                <div className="space-y-4">
-                  <button
-                    onClick={() => setShowDOModal(true)}
-                    disabled={selectedDO !== null}
-                    className={`w-full py-3 rounded-lg flex items-center justify-center gap-2 ${selectedDO ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                  >
-                    {selectedDO ? (
-                      <>
-                        <FileCheck className="w-5 h-5" />
-                        <span>DO Terpilih - Klik X untuk ganti</span>
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-5 h-5" />
-                        <span>Cari & Pilih DO</span>
-                      </>
-                    )}
-                  </button>
-
-                  {showDOModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col">
-                        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                          <h3 className="text-lg font-semibold text-gray-800">Pilih DO</h3>
-                          <button onClick={() => setShowDOModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                            <X className="w-5 h-5 text-gray-600" />
-                          </button>
-                        </div>
-                        <div className="p-4 border-b border-gray-200">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={searchKeyword}
-                              onChange={(e) => setSearchKeyword(e.target.value)}
-                              placeholder="Ketik DO/Customer..."
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button
-                              onClick={() => handleSearchDO()}
-                              disabled={searching}
-                              className="px-3 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
-                            >
-                              {searching ? <LoadingSpinner size="sm" /> : <Search className="w-5 h-5" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2">
-                          {searchResults.length > 0 ? (
-                            <div className="space-y-1">
-                              {searchResults.map((doData: any, idx: number) => (
-                                <div
-                                  key={idx}
-                                  onClick={() => handleSelectDO(doData)}
-                                  className={`p-3 cursor-pointer border rounded-lg ${selectedDO?.Nomor === doData.Nomor ? 'bg-green-50 border-green-200' : 'hover:bg-blue-50 border-gray-200'}`}
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <div className="font-medium text-gray-900 text-lg">{doData.Nomor}</div>
-                                      <div className="text-sm text-gray-600">{doData.Customer}</div>
-                                      <div className="text-xs text-gray-500 mt-1">{doData.Alamat}</div>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className="text-sm font-medium text-gray-700">{doData.Tanggal}</div>
-                                      {selectedDO?.Nomor === doData.Nomor && (
-                                        <span className="inline-block px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">Terpilih</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center py-8 text-gray-500">
-                              {searching ? 'Mencari...' : 'Ketik keyword untuk mencari DO'}
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-4 border-t border-gray-200 text-center">
-                          <button onClick={() => setShowDOModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Tutup</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedDO && (
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 text-blue-800 mb-2">
-                            <FileText className="w-4 h-4" />
-                            <span className="font-medium text-sm">DO Terpilih:</span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Nomor:</span> {selectedDO.Nomor}
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Customer:</span> {selectedDO.Customer}
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Alamat:</span> {selectedDO.Alamat}
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Tanggal:</span> {selectedDO.Tanggal}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => { setSelectedDO(null); setSearchKeyword(''); setSearchResults([]); }}
-                          className="p-2 hover:bg-blue-100 rounded-lg text-blue-600"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedDO && (
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Tanggal POD</label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                        <input
-                          type="date"
-                          value={podTanggal}
-                          onChange={(e) => setPodTanggal(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedDO && (
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Upload Foto</label>
-                      {podFotoPreview ? (
-                        <div className="relative">
-                          <img src={podFotoPreview} alt="Preview" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
-                          <button
-                            onClick={() => { setPodFoto(null); setPodFotoPreview(null); }}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                            <p className="text-sm text-gray-500">Klik untuk upload foto</p>
-                            <p className="text-xs text-gray-400">Maks 5MB</p>
-                          </div>
-                          <input type="file" accept="image/*" onChange={handleFotoChange} className="hidden" />
-                        </label>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedDO && podFoto && (
-                    <button
-                      onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <LoadingSpinner size="sm" />
-                          <span>Memproses...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileCheck className="w-5 h-5" />
-                          <span>Buat POD</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
           </div>
+        )}
 
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-lg font-semibold text-gray-800">Daftar POD</h2>
-                <div className="flex gap-2">
-                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Dari Tanggal" />
-                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Sampai Tanggal" />
-                  <button 
-                    onClick={async () => {
-                      try {
-                        const res = await api.getPOD({
-                          kar_nik: user.kar_nik,
-                          start_date: startDate,
-                          end_date: endDate
-                        });
-                        if (res.success) setPodList(res.data || []);
-                      } catch (e) {
-                        setError('Gagal memuat POD');
-                      }
-                    }} 
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-                  >
-                    Filter
+        {showDOModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pilih DO"
+            className="fixed inset-0 bg-black/40 z-40"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowDOModal(false);
+            }}
+          >
+            <div className="fixed inset-x-0 bottom-0 sm:inset-0 sm:flex sm:items-center sm:justify-center z-50 sm:p-6">
+              <div className="bg-white sm:rounded-lg sm:border sm:border-gray-200 w-full sm:max-w-lg sm:shadow-lg max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                  <h3 className="font-semibold text-ink">Pilih DO</h3>
+                  <button onClick={() => setShowDOModal(false)} className="p-2 -m-2 rounded-md text-ink-soft hover:bg-gray-100" aria-label="Tutup">
+                    <X className="w-5 h-5" />
                   </button>
+                </div>
+                <div className="px-5 py-3 border-b border-gray-100 flex gap-2">
+                  <input
+                    type="text"
+                    value={searchKeyword}
+                    onChange={(e) => setSearchKeyword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSearchDO();
+                    }}
+                    placeholder="Ketik nomor DO atau customer"
+                    className="flex-1 px-3 py-2.5 border border-gray-300 rounded-md text-sm text-ink bg-white"
+                  />
+                  <button
+                    onClick={() => handleSearchDO()}
+                    disabled={searching}
+                    className="px-3 py-2.5 rounded-md bg-primary-600 text-white disabled:opacity-50"
+                    aria-label="Cari"
+                  >
+                    {searching ? '...' : <Search className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((doData: any, idx: number) => (
+                      <button
+                        key={`${doData.Nomor}-${idx}`}
+                        onClick={() => handleSelectDO(doData)}
+                        className="w-full text-left p-3 rounded-md border border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50"
+                      >
+                        <p className="font-semibold text-ink text-sm">{doData.Nomor}</p>
+                        <p className="text-sm text-ink-soft">{doData.Customer}</p>
+                        <p className="text-xs text-ink-soft mt-0.5">{doData.Alamat}</p>
+                        <p className="text-xs text-ink-soft mt-1">Tanggal DO: {doData.Tanggal}</p>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-center text-sm text-ink-soft py-8">
+                      {searching ? 'Mencari...' : 'Tidak ada hasil. Coba kata kunci lain.'}
+                    </p>
+                  )}
                 </div>
               </div>
-
-              {podList.length === 0 ? (
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">Belum ada data POD</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nomor</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DO</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {podList.map((pod: POD, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{pod.pod_nomor}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{pod.pod_do_nomor}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{pod.Cus_nama || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{pod.pod_tanggal}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Selesai</span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button 
-                              onClick={() => handleDeletePOD(pod.pod_nomor)} 
-                              className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50" 
-                              title="Hapus POD"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </div>
+        )}
+
+        <div>
+          <h2 className="font-semibold text-ink mb-3 flex items-center gap-2">
+            <Truck className="w-4 h-4 text-primary-600" />
+            Daftar POD
+          </h2>
+
+          {loading ? (
+            <LoadingState label="Memuat POD..." />
+          ) : podList.length === 0 ? (
+            <EmptyState
+              icon={<FileText className="w-8 h-8" />}
+              title="Belum ada data POD"
+              description="POD yang dibuat pada rentang tanggal ini akan muncul di sini."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {podList.map((pod, idx) => (
+                <li key={`${pod.pod_nomor}-${idx}`} className="card p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-ink text-sm">{pod.pod_nomor}</p>
+                      <p className="text-sm text-ink-soft mt-0.5">DO: {pod.pod_do_nomor}</p>
+                      <p className="text-sm text-ink-soft">{pod.Cus_nama || '-'}</p>
+                      <p className="text-xs text-ink-soft mt-0.5">{tanggalPanjang(pod.pod_tanggal)}</p>
+                    </div>
+                    <span className="rounded-full bg-success-50 text-success-700 text-xs px-2.5 py-1 shrink-0">Selesai</span>
+                    <button
+                      onClick={() => handleDeletePOD(pod.pod_nomor)}
+                      className="p-2 rounded-md text-danger-600 hover:bg-danger-50 shrink-0"
+                      aria-label="Hapus POD"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

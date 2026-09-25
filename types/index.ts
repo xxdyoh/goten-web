@@ -48,3 +48,39 @@ export interface BrowserInfo {
   resolution: string;
   language: string;
 }
+
+export type IzinStatus = 'PENDING' | 'ACCEPT' | 'REJECT';
+
+export interface IzinItem {
+  ij_nomor: string;
+  kar_nik: string;
+  tanggal: string;
+  alasan: string;
+  keterangan?: string;
+  ij_foto?: string;
+  ij_status: IzinStatus;
+  ij_shift?: number;
+}
+
+export interface ApprovalItem extends IzinItem {
+  kar_nama?: string;
+  nm_unit?: string;
+}
+
+export interface HistoryItem {
+  Nama: string;
+  Tanggal: string;
+  _IN?: string;
+  _OUT?: string;
+  Status?: string;
+  shift?: number;
+  shift_name?: string;
+}
+
+export interface StatistikItem {
+  Nama: string;
+  JumlahTerlambat: number;
+  JumlahTepatWaktu: number;
+  PersentaseTerlambat: number;
+  PersentaseTepatWaktu: number;
+}

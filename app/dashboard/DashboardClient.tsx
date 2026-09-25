@@ -2,231 +2,254 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Building2, AlertCircle, FileCheck } from 'lucide-react';
+import Link from 'next/link';
+import {
+  AlertCircle,
+  MapPin,
+  ChevronRight,
+  RefreshCw,
+  LogIn,
+  LogOut as LogOutIcon,
+  ReceiptText,
+  CalendarClock,
+  FolderCheck,
+  BarChart3,
+  Truck,
+  CheckCircle2,
+  Leaf,
+  Loader2,
+} from 'lucide-react';
 import LocationMap from '@/components/maps/LocationMap';
-import AttendanceStatus from '@/components/attendance/AttendanceStatus';
-import AttendanceButtons from '@/components/attendance/AttendanceButtons';
-import { api } from '@/lib/api';
-import { calculateDistance } from '@/lib/utils';
+import { useToast } from '@/components/ui/ToastProvider';
+import { api, ShiftItem } from '@/lib/api';
+import { calculateDistance, jamSaja } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { User as UserType, Unit, RotiQUnit } from '@/types';
 
-interface TodayAttendance {
-  checkInTime?: string;
-  checkOutTime?: string;
+interface MenuItem {
+  label: string;
+  desc: string;
+  to: string;
+  icon: React.ReactNode;
+  gradient: string;
+  badge?: number;
 }
 
 export default function DashboardClient() {
   const router = useRouter();
+  const toast = useToast();
   const [user, setUser] = useState<UserType | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [userLocation, setUserLocation] = useState({ lat: -7.538982, lng: 110.844009 });
-  const [todayAttendance, setTodayAttendance] = useState<TodayAttendance>({});
+  const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [isRotiQMobile, setIsRotiQMobile] = useState(false);
   const [rotiQUnits, setRotiQUnits] = useState<RotiQUnit[]>([]);
   const [selectedRotiQUnit, setSelectedRotiQUnit] = useState<RotiQUnit | null>(null);
-  const [isRotiQEmployee, setIsRotiQEmployee] = useState(false);
+
+  const [shifts, setShifts] = useState<ShiftItem[]>([]);
+  const [selectedShift, setSelectedShift] = useState(1);
+
+  const [sisaCuti, setSisaCuti] = useState<number | null>(null);
+  const [isApprover, setIsApprover] = useState(false);
+  const [kdUnits, setKdUnits] = useState<string[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const isUnit20 = user?.kar_kd_unit === '20';
+  const isPODMenu = user?.kar_kd_jabat === '21' || user?.kar_kd_jabat === '30';
+
+  const detectShift = () => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 14) return 1;
+    if (hour >= 14 && hour < 22) return 2;
+    return 3;
+  };
+
+  const autoShift = (status: number) => {
+    const hour = new Date().getHours();
+    if (status === 2 && hour >= 6 && hour < 8) return 3;
+    return detectShift();
+  };
 
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
     try {
       const result = await authService.checkAuth();
-      
-      if (!result.authenticated) {
+      if (!result.authenticated || !result.user) {
         router.push('/login');
         return;
       }
-      
-      if (result.user) {
-        setUser(result.user);
-        // Load data setelah auth success
-        await loadUserData(result.user);
-        getCurrentLocation();
-      } else {
-        setError('User data tidak ditemukan');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Auth error:', error);
-      setError('Error checking authentication');
+      setUser(result.user);
+      await loadUserData(result.user);
+      getCurrentLocation();
+    } catch (e) {
+      console.error('Auth error:', e);
+      setError('Gagal memeriksa autentikasi');
       setLoading(false);
     }
   };
 
   const loadUserData = async (userData: UserType) => {
     try {
-      console.log('Loading user data:', userData);
-      
-      // Get unit data
       if (userData.kar_kd_unit) {
         const unitResponse = await api.getUnitData(userData.kar_kd_unit);
-        console.log('Unit response:', unitResponse);
-        
         if (unitResponse.success && unitResponse.data && unitResponse.data.length > 0) {
           const unitData = unitResponse.data[0];
-          setUnit(unitData);
-          
-          // Cek apakah karyawan RotiQ
-          const isRotiQ = unitData.nm_unit.toLowerCase().includes('rotiq');
-          setIsRotiQEmployee(isRotiQ);
-          
-          // Jika karyawan RotiQ, load daftar unit RotiQ
-          if (isRotiQ) {
-            await loadRotiQUnits(unitData);
-          }
+          setUnit({
+            ...unitData,
+            latitude: parseFloat(unitData.latitude),
+            longitude: parseFloat(unitData.longitude),
+          });
         } else {
           setError('Data unit tidak ditemukan');
         }
       }
 
-      // Get today's attendance
+      try {
+        const rotiq = await api.cekRotiqMobile(userData.kar_nik);
+        if (rotiq?.success && rotiq.is_rotiq_mobile) {
+          const units: RotiQUnit[] = (rotiq.units ?? []).map((u: any) => ({
+            kd_unit: u.kd_unit,
+            nm_unit: u.nm_unit,
+            latitude: parseFloat(u.latitude),
+            longitude: parseFloat(u.longitude),
+          }));
+          setRotiQUnits(units);
+          setIsRotiQMobile(true);
+          if (units.length > 0) {
+            setSelectedRotiQUnit(units.find((u) => u.kd_unit === userData.kar_kd_unit) ?? units[0]);
+          }
+        } else {
+          setIsRotiQMobile(false);
+          setRotiQUnits([]);
+          setSelectedRotiQUnit(null);
+        }
+      } catch (e) {
+        console.error('Error cek RotiQ:', e);
+      }
+
       if (userData.kar_nama) {
         const attendanceResponse = await api.getTodayAttendance(userData.kar_nama);
-        console.log('Attendance response:', attendanceResponse);
-        
-        if (attendanceResponse.success && attendanceResponse.data && attendanceResponse.data.length > 0) {
-          const attendance = attendanceResponse.data[0];
-          setTodayAttendance({
-            checkInTime: attendance._IN,
-            checkOutTime: attendance._OUT
-          });
+        if (attendanceResponse.success && Array.isArray(attendanceResponse.data)) {
+          setSessions(attendanceResponse.data);
+        } else {
+          setSessions([]);
         }
       }
-    } catch (error) {
-      console.error('Error loading user data:', error);
+
+      if (userData.kar_kd_unit === '20') {
+        try {
+          const shiftResponse = await api.getShifts();
+          if (shiftResponse.success && shiftResponse.data && shiftResponse.data.length > 0) {
+            setShifts(shiftResponse.data);
+            setSelectedShift(shiftResponse.default_shift || 1);
+          } else {
+            setShifts([]);
+          }
+        } catch (shiftError) {
+          console.error('Error loading shifts:', shiftError);
+          setShifts([]);
+        }
+      } else {
+        setShifts([]);
+      }
+
+      try {
+        const cuti = await api.getSisaCuti(userData.kar_nik);
+        if (cuti?.success) setSisaCuti(cuti.sisa_cuti ?? 0);
+      } catch (e) {
+        console.error('Error sisa cuti:', e);
+      }
+
+      try {
+        const role = await api.cekRoleApproval(userData.kar_nik);
+        if (role?.success && role.is_approver) {
+          const unitsArr: string[] = (role.kd_units ?? []).map((e: any) => e.toString());
+          setIsApprover(true);
+          setKdUnits(unitsArr);
+          if (unitsArr.length > 0) {
+            const pending = await api.getApprovalList({ kd_units: unitsArr.join(','), status: 'PENDING' });
+            if (pending?.success && Array.isArray(pending.data)) {
+              setPendingCount(pending.data.length);
+            }
+          }
+        } else {
+          setIsApprover(false);
+          setKdUnits([]);
+          setPendingCount(0);
+        }
+      } catch (e) {
+        console.error('Error cek role:', e);
+      }
+    } catch (e) {
+      console.error('Error loading user data:', e);
       setError('Gagal memuat data user');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadRotiQUnits = async (currentUnit: Unit) => {
-    try {
-      const response = await api.getRotiQUnits();
-      console.log('RotiQ units response:', response);
-      
-      if (response.success && response.data) {
-        const units = response.data.map((item: any) => ({
-          kd_unit: item.kd_unit,
-          nm_unit: item.nm_unit,
-          latitude: parseFloat(item.latitude),
-          longitude: parseFloat(item.longitude)
-        }));
-        
-        setRotiQUnits(units);
-        
-        // Set unit default (unit karyawan atau pertama)
-        let defaultUnit = units.find((u: RotiQUnit) => u.kd_unit === currentUnit.kd_unit);
-        if (!defaultUnit && units.length > 0) {
-          defaultUnit = units[0];
-        }
-        
-        if (defaultUnit) {
-          setSelectedRotiQUnit(defaultUnit);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading RotiQ units:', error);
+  const getCurrentLocation = () => {
+    setIsRefreshingLocation(true);
+    if (!navigator.geolocation) {
+      toast.show('error', 'Browser Anda tidak mendukung geolokasi');
+      setIsRefreshingLocation(false);
+      return;
     }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setIsRefreshingLocation(false);
+      },
+      (err) => {
+        console.error('Error getting location:', err);
+        toast.show('error', 'Gagal mendapat lokasi. Pastikan izin lokasi aktif.');
+        setIsRefreshingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleRotiQUnitChange = (unit: RotiQUnit) => {
     setSelectedRotiQUnit(unit);
-    // Update map location ke unit terpilih
-    setUserLocation({
-      lat: unit.latitude,
-      lng: unit.longitude
-    });
+    setUserLocation({ lat: unit.latitude, lng: unit.longitude });
   };
 
-  const getCurrentLocation = () => {
-    setIsRefreshingLocation(true);
-    
-    if (!navigator.geolocation) {
-      alert('Geolocation tidak didukung oleh browser Anda');
-      setIsRefreshingLocation(false);
+  const submitAbsensi = async (status: 1 | 2) => {
+    if (!user || !unit) return;
+    const effective = effectiveUnit;
+    const distance = calculateDistance(userLocation.lat, userLocation.lng, effective.latitude, effective.longitude);
+    if (distance >= 500) {
+      toast.show('error', 'Anda berada di luar jangkauan 500 meter dari titik absen');
       return;
     }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newLocation = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
-        setUserLocation(newLocation);
-        setIsRefreshingLocation(false);
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        alert('Gagal mendapatkan lokasi. Pastikan izin lokasi sudah diberikan.');
-        setIsRefreshingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
-  };
-
-  const handleCheckIn = async () => {
-    if (!user || !unit) return;
-    
-    setIsCheckingIn(true);
+    const isIn = status === 1;
+    isIn ? setIsCheckingIn(true) : setIsCheckingOut(true);
     try {
-      const now = new Date();
-      const tanggal = now.toISOString().slice(0, 19).replace('T', ' ');
-
       await api.submitAttendance({
         kar_nik: user.kar_nik,
-        tanggal,
         kd_cabang: user.kar_kd_unit,
         latitude: userLocation.lat.toString(),
-        longitude: userLocation.lng.toString()
+        longitude: userLocation.lng.toString(),
+        status_absen: status,
+        shift: isUnit20 && shifts.length > 0 ? selectedShift : autoShift(status),
       });
-
+      toast.show('success', isIn ? 'Check in berhasil' : 'Check out berhasil');
       await loadUserData(user);
-      alert('Check In berhasil!');
-    } catch (error) {
-      console.error('Error during check in:', error);
-      alert('Check In gagal. Silakan coba lagi.');
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || (isIn ? 'Check in gagal, coba lagi' : 'Check out gagal, coba lagi');
+      toast.show('error', msg);
     } finally {
-      setIsCheckingIn(false);
-    }
-  };
-
-  const handleCheckOut = async () => {
-    if (!user || !unit) return;
-    
-    setIsCheckingOut(true);
-    try {
-      const now = new Date();
-      const tanggal = now.toISOString().slice(0, 19).replace('T', ' ');
-
-      await api.submitAttendance({
-        kar_nik: user.kar_nik,
-        tanggal,
-        kd_cabang: user.kar_kd_unit,
-        latitude: userLocation.lat.toString(),
-        longitude: userLocation.lng.toString()
-      });
-
-      await loadUserData(user);
-      alert('Check Out berhasil!');
-    } catch (error) {
-      console.error('Error during check out:', error);
-      alert('Check Out gagal. Silakan coba lagi.');
-    } finally {
-      setIsCheckingOut(false);
+      isIn ? setIsCheckingIn(false) : setIsCheckingOut(false);
     }
   };
 
@@ -241,41 +264,27 @@ export default function DashboardClient() {
     checkAuth();
   };
 
-  // Debug info
-  console.log('Dashboard state:', { user, unit, loading, error });
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Memuat dashboard...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center max-w-md mx-auto p-6">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <div className="space-y-2">
-            <button
-              onClick={handleRetry}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-            >
-              Coba Lagi
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600"
-            >
-              Logout
-            </button>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-bg p-6">
+        <div className="text-center max-w-md w-full card p-8">
+          <AlertCircle className="w-10 h-10 text-danger-600 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-ink mb-1">Terjadi kesalahan</h2>
+          <p className="text-ink-soft mb-5">{error}</p>
+          <button onClick={handleRetry} className="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700">
+            Coba lagi
+          </button>
+          <button onClick={handleLogout} className="w-full mt-2 text-danger-700 py-3 rounded-lg hover:bg-danger-50">
+            Keluar
+          </button>
         </div>
       </div>
     );
@@ -283,221 +292,271 @@ export default function DashboardClient() {
 
   if (!user || !unit) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Data Tidak Lengkap</h2>
-          <p className="text-gray-600 mb-4">Data user atau unit tidak ditemukan</p>
-          <button
-            onClick={handleLogout}
-            className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-          >
-            Kembali ke Login
+      <div className="min-h-screen flex items-center justify-center bg-bg p-6">
+        <div className="text-center max-w-md w-full card p-8">
+          <AlertCircle className="w-10 h-10 text-warning-700 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-ink mb-1">Data tidak lengkap</h2>
+          <p className="text-ink-soft mb-5">Data karyawan atau unit tidak ditemukan</p>
+          <button onClick={handleLogout} className="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700">
+            Kembali ke login
           </button>
         </div>
       </div>
     );
   }
 
-  const effectiveUnit = isRotiQEmployee && selectedRotiQUnit 
-    ? { ...selectedRotiQUnit, latitude: selectedRotiQUnit.latitude, longitude: selectedRotiQUnit.longitude }
-    : unit;
-
-  const distance = effectiveUnit ? calculateDistance(
-    userLocation.lat,
-    userLocation.lng,
-    effectiveUnit.latitude,
-    effectiveUnit.longitude
-  ) : 0;
-
+  const effectiveUnit = isRotiQMobile && selectedRotiQUnit ? selectedRotiQUnit : unit;
+  const distance = calculateDistance(userLocation.lat, userLocation.lng, effectiveUnit.latitude, effectiveUnit.longitude);
   const isWithinRange = distance <= 500;
 
+  // Tampilan masuk/keluar mengikuti shift yang dipilih (unit 20); sesi terbuka lebih dulu
+  const displaySession = isUnit20
+    ? (sessions.find((s) => Number(s.shift) === selectedShift) ??
+      sessions.find((s) => !s._OUT) ??
+      null)
+    : (sessions[0] ?? null);
+  const checkInTime = displaySession?._IN;
+  const checkOutTime = displaySession?._OUT;
+  const hasIn = Boolean(checkInTime);
+  const hasOut = Boolean(checkOutTime);
+  const statusLabel = hasIn && hasOut ? 'Selesai' : hasIn ? 'Aktif' : 'Belum absen';
+
+  const menuItems: MenuItem[] = [
+    {
+      label: 'Riwayat',
+      desc: 'Riwayat absensi',
+      to: '/history',
+      icon: <ReceiptText className="w-5 h-5" />,
+      gradient: 'from-primary-600 to-primary-700',
+    },
+    {
+      label: 'Izin',
+      desc: 'Ajukan izin',
+      to: '/izin',
+      icon: <CalendarClock className="w-5 h-5" />,
+      gradient: 'from-danger-600 to-danger-700',
+    },
+    {
+      label: 'Laporan',
+      desc: 'Izin disetujui',
+      to: '/laporan',
+      icon: <FolderCheck className="w-5 h-5" />,
+      gradient: 'from-success-600 to-success-700',
+    },
+    {
+      label: 'Statistik',
+      desc: 'Performa absen',
+      to: '/statistik',
+      icon: <BarChart3 className="w-5 h-5" />,
+      gradient: 'from-[#6D28D9] to-[#5B21B6]',
+    },
+  ];
+
+  if (isPODMenu) {
+    menuItems.push({
+      label: 'POD',
+      desc: 'Proof of delivery',
+      to: '/pod',
+      icon: <Truck className="w-5 h-5" />,
+      gradient: 'from-[#B45309] to-[#92400E]',
+    });
+  }
+
+  if (isApprover) {
+    menuItems.push({
+      label: 'Persetujuan',
+      desc: 'Izin bawahan',
+      to: '/approval',
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      gradient: 'from-[#0E7490] to-[#155E75]',
+      badge: pendingCount > 0 ? pendingCount : undefined,
+    });
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Building2 className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">GOTEN</h1>
-                {/* <p className="text-sm text-gray-600">PT Bumi Sarana Maju</p> */}
+    <div className="min-h-screen bg-bg">
+      <main className="mx-auto max-w-3xl px-4 sm:px-6 py-6 space-y-6">
+        {/* Kartu profil + absensi (mirror Flutter) */}
+        <section className="rounded-xl bg-gradient-to-br from-success-600 to-success-700 p-5 sm:p-6 text-white shadow-soft">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 shrink-0 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
+              {(user.kar_nama || user.kar_nik || '?').charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-lg leading-tight truncate">{user.kar_nama}</p>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                <span className="text-xs bg-white/15 rounded-full px-2.5 py-0.5">{user.kar_kd_jabat ?? 'Karyawan'}</span>
+                <span className="text-xs bg-white/15 rounded-full px-2.5 py-0.5">{unit.nm_unit}</span>
               </div>
             </div>
-
-            <div className="flex items-center space-x-4">
-                {/* <div className="text-right">
-                    <p className="font-medium text-gray-900">{user.kar_nama}</p>
-                    <p className="text-sm text-gray-600">{unit.nm_unit}</p>
-                </div>
-                <div className="bg-gray-100 p-2 rounded-full">
-                    <User className="w-5 h-5 text-gray-600" />
-                </div> */}
+            <div className="flex items-start gap-2 shrink-0">
+              <div className="text-center bg-white/15 rounded-lg px-3 py-2">
+                <p className="text-2xl font-bold leading-none">{sisaCuti !== null ? sisaCuti : '--'}</p>
+                <p className="text-[11px] text-white/80 mt-0.5">Sisa cuti</p>
+              </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="p-2.5 rounded-lg bg-white/15 text-white hover:bg-white/25"
+                aria-label="Keluar"
+                title="Keluar"
               >
-                <LogOut className="w-4 h-4" />
-                Keluar
+                <LogOutIcon className="w-5 h-5" />
               </button>
             </div>
           </div>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Map */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Map */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Lokasi Saat Ini
-              </h2>
-              <LocationMap
-                userLocation={userLocation}
-                officeLocation={{
-                  lat: effectiveUnit?.latitude || -7.538982,
-                  lng: effectiveUnit?.longitude || 110.844009
+          {isRotiQMobile && rotiQUnits.length > 0 && (
+            <div className="mt-4">
+              <label className="text-xs text-white/80 flex items-center gap-1.5 mb-1.5">
+                <Leaf className="w-3.5 h-3.5" /> Lokasi RotiQ absen
+              </label>
+              <select
+                value={selectedRotiQUnit?.kd_unit ?? ''}
+                onChange={(e) => {
+                  const u = rotiQUnits.find((x) => x.kd_unit === e.target.value);
+                  if (u) handleRotiQUnitChange(u);
                 }}
-                rotiQLocation={isRotiQEmployee && selectedRotiQUnit ? {
-                  lat: selectedRotiQUnit.latitude,
-                  lng: selectedRotiQUnit.longitude
-                } : undefined}
-                height="400px"
-              />
-              <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span className="text-gray-600">Lokasi Anda</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  <span className="text-gray-600">Lokasi Kantor</span>
-                </div>
-              </div>
+                className="w-full px-3 py-2.5 rounded-lg border-0 text-sm text-ink bg-white"
+              >
+                {rotiQUnits.map((u) => (
+                  <option key={u.kd_unit} value={u.kd_unit}>
+                    {u.nm_unit}
+                  </option>
+                ))}
+              </select>
             </div>
+          )}
 
-            {/* Attendance History */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Riwayat Absensi
-              </h2>
-              <div className="text-center py-8 text-gray-500">
-                <p>Fitur riwayat absensi akan segera hadir</p>
-              </div>
+          {isUnit20 && shifts.length > 0 && (
+            <div className="mt-4">
+              <label className="text-xs text-white/80 mb-1.5 block">Shift</label>
+              <select
+                value={selectedShift}
+                onChange={(e) => setSelectedShift(Number(e.target.value))}
+                className="w-full px-3 py-2.5 rounded-lg border-0 text-sm text-ink bg-white"
+              >
+                {shifts.map((s) => (
+                  <option key={s.kd_shift} value={s.kd_shift}>
+                    Shift {s.kd_shift} ({s.nm_shift}) · {s.jam_mulai} - {s.jam_selesai}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <span className="text-xs bg-white/15 rounded-full px-3 py-1">{statusLabel}</span>
+            <button
+              onClick={getCurrentLocation}
+              disabled={isRefreshingLocation}
+              className="flex items-center gap-1.5 text-xs text-white/85 hover:text-white disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingLocation ? 'animate-spin' : ''}`} />
+              Perbarui lokasi
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="bg-white/15 rounded-xl p-4">
+              <p className="text-xs text-white/80 flex items-center gap-1.5">
+                <LogIn className="w-3.5 h-3.5" /> Masuk
+              </p>
+              <p className="text-3xl font-bold mt-1">{jamSaja(checkInTime)}</p>
+            </div>
+            <div className="bg-white/15 rounded-xl p-4">
+              <p className="text-xs text-white/80 flex items-center gap-1.5">
+                <LogOutIcon className="w-3.5 h-3.5" /> Keluar
+              </p>
+              <p className="text-3xl font-bold mt-1">{jamSaja(checkOutTime)}</p>
             </div>
           </div>
 
-          {/* Right Column - Attendance Actions */}
-          <div className="space-y-8">
-            {isRotiQEmployee && rotiQUnits.length > 0 && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <Building2 className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800">Lokasi RotiQ Saat Ini</h3>
-                    <p className="text-sm text-gray-600">Pilih unit RotiQ untuk absensi</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <select
-                    value={selectedRotiQUnit?.kd_unit || ''}
-                    onChange={(e) => {
-                      const unit = rotiQUnits.find(u => u.kd_unit === e.target.value);
-                      if (unit) handleRotiQUnitChange(unit);
-                    }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
-                  >
-                    {rotiQUnits.map((unit) => (
-                      <option key={unit.kd_unit} value={unit.kd_unit}>
-                        {unit.nm_unit}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  {selectedRotiQUnit && (
-                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                      <p className="text-sm text-orange-800">
-                        <span className="font-medium">Unit terpilih:</span> {selectedRotiQUnit.nm_unit}
-                      </p>
-                      <p className="text-xs text-orange-600 mt-1">
-                        Koordinat: {selectedRotiQUnit.latitude.toFixed(6)}, {selectedRotiQUnit.longitude.toFixed(6)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-white/80">
+              {distance > 1000 ? `${(distance / 1000).toFixed(1)} km` : `${distance.toFixed(0)} m`} dari titik absen ·{' '}
+              {isWithinRange ? 'dalam jangkauan' : 'di luar jangkauan'}
+            </p>
+            {!isWithinRange && (
+              <span className="shrink-0 text-[11px] bg-white text-danger-700 rounded-full px-2.5 py-1 font-medium">
+                Pergeseran
+              </span>
             )}
-
-            <AttendanceStatus
-              checkInTime={todayAttendance.checkInTime}
-              checkOutTime={todayAttendance.checkOutTime}
-              distance={distance}
-              isWithinRange={isWithinRange}
-            />
-
-            <AttendanceButtons
-              onCheckIn={handleCheckIn}
-              onCheckOut={handleCheckOut}
-              onRefreshLocation={getCurrentLocation}
-              isCheckingIn={isCheckingIn}
-              isCheckingOut={isCheckingOut}
-              isRefreshingLocation={isRefreshingLocation}
-              hasCheckedIn={!!todayAttendance.checkInTime}
-              hasCheckedOut={!!todayAttendance.checkOutTime}
-              isWithinRange={isWithinRange}
-              isRotiQEmployee={isRotiQEmployee}
-            />
-
-            {/* POD Menu Button - hanya untuk jabatan 21 atau 30 */}
-            {(user.kar_kd_jabat === '21' || user.kar_kd_jabat === '30') && (
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <button
-                  onClick={() => router.push('/pod')}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  <FileCheck className="w-5 h-5" />
-                  <span className="font-medium">Proof of Delivery</span>
-                </button>
-              </div>
-            )}
-
-            {/* User Info Card */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Informasi Karyawan
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-600">Nama</p>
-                  <p className="font-medium text-gray-900">{user.kar_nama}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">NIK</p>
-                  <p className="font-medium text-gray-900">{user.kar_nik}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Unit</p>
-                  <p className="font-medium text-gray-900">{unit.nm_unit}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Lokasi Kantor</p>
-                  <p className="text-sm text-gray-900">
-                    {unit.latitude}, {unit.longitude}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
-        </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => submitAbsensi(1)}
+              disabled={hasIn || isCheckingIn}
+              className={`flex items-center justify-center gap-2 min-h-12 rounded-lg font-semibold ${
+                hasIn ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-success-700 hover:bg-success-50'
+              }`}
+            >
+              {isCheckingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+              {hasIn ? 'Selesai' : 'Check In'}
+            </button>
+            <button
+              onClick={() => submitAbsensi(2)}
+              disabled={hasOut || isCheckingOut}
+              className={`flex items-center justify-center gap-2 min-h-12 rounded-lg font-semibold ${
+                hasOut ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-warning-700 hover:bg-warning-50'
+              }`}
+            >
+              {isCheckingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOutIcon className="w-4 h-4" />}
+              {hasOut ? 'Selesai' : 'Check Out'}
+            </button>
+          </div>
+        </section>
+
+        {/* Launchpad menu (mirror Flutter) */}
+        <section>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {menuItems.map((m) => (
+              <Link
+                key={m.label}
+                href={m.to}
+                className={`relative rounded-xl bg-gradient-to-br ${m.gradient} p-4 text-white min-h-32 flex flex-col justify-between hover:opacity-95 active:scale-[0.98] transition shadow-soft`}
+              >
+                {m.badge && (
+                  <span className="absolute top-3 right-3 rounded-full bg-white text-danger-600 text-xs font-bold px-2 py-0.5">
+                    {m.badge > 99 ? '99+' : m.badge}
+                  </span>
+                )}
+                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">{m.icon}</div>
+                <div>
+                  <p className="font-semibold text-sm">{m.label}</p>
+                  <p className="text-[11px] text-white/80 leading-tight">{m.desc}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Peta lokasi */}
+        <section className="card p-5">
+          <h2 className="font-semibold text-ink mb-3 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-primary-600" />
+            Lokasi saat ini
+          </h2>
+          <LocationMap
+            userLocation={userLocation}
+            officeLocation={{ lat: effectiveUnit.latitude, lng: effectiveUnit.longitude }}
+            rotiQLocation={
+              isRotiQMobile && selectedRotiQUnit
+                ? { lat: selectedRotiQUnit.latitude, lng: selectedRotiQUnit.longitude }
+                : undefined
+            }
+            height="300px"
+          />
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-soft">
+            <span>
+              Anda: {userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}
+            </span>
+            <span className="flex items-center gap-1">
+              <ChevronRight className="w-3 h-3" />
+              Titik absen: {effectiveUnit.latitude.toFixed(5)}, {effectiveUnit.longitude.toFixed(5)}
+            </span>
+          </div>
+        </section>
       </main>
     </div>
   );

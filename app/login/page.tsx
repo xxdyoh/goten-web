@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, Lock } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 import { authService } from '@/lib/auth';
 
 export default function Login() {
@@ -18,8 +18,7 @@ export default function Login() {
     setError('');
 
     try {
-      const result = await authService.directLogin(karNik, password);
-
+      const result = await authService.login(karNik, password);
       if (result.success) {
         router.push('/dashboard');
       } else {
@@ -34,74 +33,61 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8">
-      <div className="max-w-md w-full space-y-8">
-        {/* Header */}
+    <div className="min-h-screen bg-bg flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3 rounded-2xl">
-              <Clock className="w-8 h-8 text-white" />
-            </div>
+          <div className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 mb-4 shadow-soft">
+            <Building2 className="w-5 h-5 text-white" />
+            <span className="font-bold text-white">GOTEN</span>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">GOTEN</h2>
+          <h1 className="text-xl font-bold text-ink">Masuk</h1>
+          <p className="text-sm text-ink-soft mt-1">Sistem absensi PT Bumi Sarana Maju</p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-white p-8 rounded-2xl shadow-lg">
+        <form onSubmit={handleSubmit} className="card p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="rounded-md bg-danger-50 border border-danger-600/30 text-danger-700 px-3 py-2.5 text-sm">
               {error}
             </div>
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="karNik" className="block text-sm font-medium text-gray-700 mb-2">
-                NIK Karyawan
-              </label>
-              <input
-                id="karNik"
-                type="text"
-                required
-                value={karNik}
-                onChange={(e) => setKarNik(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
-                placeholder="Masukkan NIK Anda"
-              />
-            </div>
+          <label className="block">
+            <span className="field-label">NIK Karyawan</span>
+            <input
+              type="text"
+              required
+              autoComplete="username"
+              value={karNik}
+              onChange={(e) => setKarNik(e.target.value)}
+              placeholder="Masukkan NIK"
+              className="field"
+            />
+          </label>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-black"
-                placeholder="Masukkan password"
-              />
-            </div>
-          </div>
+          <label className="block">
+            <span className="field-label">Password</span>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Masukkan password"
+              className="field"
+            />
+          </label>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 font-medium"
           >
-            {loading ? 'Memproses Login...' : 'Login'}
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
 
-        {/* Info */}
-        <div className="text-center text-sm text-gray-500">
-          <p className="flex items-center justify-center gap-1">
-            <Lock className="w-3 h-3" />
-            Gunakan NIK dan password Anda
-          </p>
-        </div>
+        <p className="text-center text-xs text-ink-soft">PT Bumi Sarana Maju</p>
       </div>
     </div>
   );
