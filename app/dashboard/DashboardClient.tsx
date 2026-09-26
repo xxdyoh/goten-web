@@ -63,19 +63,6 @@ export default function DashboardClient() {
   const isUnit20 = user?.kar_kd_unit === '20';
   const isPODMenu = user?.kar_kd_jabat === '21' || user?.kar_kd_jabat === '30';
 
-  const detectShift = () => {
-    const hour = new Date().getHours();
-    if (hour >= 6 && hour < 14) return 1;
-    if (hour >= 14 && hour < 22) return 2;
-    return 3;
-  };
-
-  const autoShift = (status: number) => {
-    const hour = new Date().getHours();
-    if (status === 2 && hour >= 6 && hour < 8) return 3;
-    return detectShift();
-  };
-
   useEffect(() => {
     checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,8 +135,13 @@ export default function DashboardClient() {
 
       if (userData.kar_kd_unit === '20') {
         try {
-          const shiftResponse = await api.getShifts();
-          if (shiftResponse.success && shiftResponse.data && shiftResponse.data.length > 0) {
+          const shiftResponse = await api.getShifts(userData.kar_nik);
+          if (
+            !shiftResponse.non_shift &&
+            shiftResponse.success &&
+            shiftResponse.data &&
+            shiftResponse.data.length > 0
+          ) {
             setShifts(shiftResponse.data);
             setSelectedShift(shiftResponse.default_shift || 1);
           } else {
@@ -241,7 +233,7 @@ export default function DashboardClient() {
         latitude: userLocation.lat.toString(),
         longitude: userLocation.lng.toString(),
         status_absen: status,
-        shift: isUnit20 && shifts.length > 0 ? selectedShift : autoShift(status),
+        shift: shifts.length > 0 ? selectedShift : undefined,
       });
       toast.show('success', isIn ? 'Check in berhasil' : 'Check out berhasil');
       await loadUserData(user);
@@ -310,11 +302,12 @@ export default function DashboardClient() {
   const isWithinRange = distance <= 500;
 
   // Tampilan masuk/keluar mengikuti shift yang dipilih (unit 20); sesi terbuka lebih dulu
-  const displaySession = isUnit20
-    ? (sessions.find((s) => Number(s.shift) === selectedShift) ??
-      sessions.find((s) => !s._OUT) ??
-      null)
-    : (sessions[0] ?? null);
+  const displaySession =
+    isUnit20 && shifts.length > 0
+      ? (sessions.find((s) => Number(s.shift) === selectedShift) ??
+        sessions.find((s) => !s._OUT) ??
+        null)
+      : (sessions[0] ?? null);
   const checkInTime = displaySession?._IN;
   const checkOutTime = displaySession?._OUT;
   const hasIn = Boolean(checkInTime);

@@ -66,9 +66,9 @@ export const api = {
     return response.data;
   },
 
-  // Daftar shift (cabang 20) + usulan shift default
-  async getShifts() {
-    const response = await axios.get(`${API_BASE_URL}/absensi/shift`);
+  // Daftar shift (cabang 20) + usulan shift default. non_shift=true bila karyawan bukan user shift.
+  async getShifts(kar_nik: string) {
+    const response = await axios.post(`${API_BASE_URL}/absensi/shift`, { kar_nik });
     return response.data;
   },
 
