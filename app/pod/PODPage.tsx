@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { POD } from '@/types';
 import { tanggalPanjang, tanggalHariIni } from '@/lib/utils';
 
-export default function PODPage() {
+function PODView() {
   const user = useAppUser();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -190,8 +190,7 @@ export default function PODPage() {
   };
 
   return (
-    <AppShell title="Proof of Delivery" right={null}>
-      <div className="space-y-6">
+    <div className="space-y-6">
         {error && !loading && (
           <div className="flex items-center gap-2 rounded-lg bg-danger-50 border border-danger-600/30 text-danger-700 px-4 py-3 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -411,6 +410,13 @@ export default function PODPage() {
           )}
         </div>
       </div>
+  );
+}
+
+export default function PODPage() {
+  return (
+    <AppShell title="Proof of Delivery" right={null}>
+      <PODView />
     </AppShell>
   );
 }
