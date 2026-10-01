@@ -503,7 +503,7 @@ export default function DashboardClient() {
               }`}
             >
               {isCheckingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-              {canCheckIn ? 'Check In' : 'Sudah Absen'}
+              {canCheckIn ? 'Check In' : 'Sudah Check In'}
             </button>
             <button
               onClick={() => submitAbsensi(2)}
