@@ -53,14 +53,22 @@ export default function DashboardClient() {
   const [selectedRotiQUnit, setSelectedRotiQUnit] = useState<RotiQUnit | null>(null);
 
   const [shifts, setShifts] = useState<ShiftItem[]>([]);
-  const [selectedShift, setSelectedShift] = useState(1);
+  const [selectedShift, setSelectedShift] = useState(0);
+  // Shift yang masih punya check-in tanpa check-out, dari server.
+  const [openShift, setOpenShift] = useState<number[]>([]);
+  // Shift yang punya check-in (terbuka atau sudah tertutup). Check-out boleh
+  // diulang pada shift ini selama masih dalam batas 3x / 18 jam.
+  const [checkOutShift, setCheckOutShift] = useState<number[]>([]);
 
   const [sisaCuti, setSisaCuti] = useState<number | null>(null);
   const [isApprover, setIsApprover] = useState(false);
   const [kdUnits, setKdUnits] = useState<string[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
 
-  const isUnit20 = user?.kar_kd_unit === '20';
+  // Cabang 20 saja yang punya pilihan shift. Hari Minggu hanya Day Shift.
+  const isUnit20 = String(user?.kar_kd_unit ?? '') === '20';
+  const isMinggu = new Date().getDay() === 0;
+  const showShiftPicker = isUnit20 && !isMinggu;
   const isPODMenu = user?.kar_kd_jabat === '21' || user?.kar_kd_jabat === '30';
 
   useEffect(() => {
@@ -131,19 +139,21 @@ export default function DashboardClient() {
         } else {
           setSessions([]);
         }
+        // Server yang menentukan shift mana yang masih terbuka dan mana yang punya check-in.
+        setOpenShift(Array.isArray(attendanceResponse.open_shift)
+          ? attendanceResponse.open_shift.map(Number)
+          : []);
+        setCheckOutShift(Array.isArray(attendanceResponse.check_out_shift)
+          ? attendanceResponse.check_out_shift.map(Number)
+          : []);
       }
 
-      if (userData.kar_kd_unit === '20') {
+      if (String(userData.kar_kd_unit) === '20') {
         try {
           const shiftResponse = await api.getShifts(userData.kar_nik);
-          if (
-            !shiftResponse.non_shift &&
-            shiftResponse.success &&
-            shiftResponse.data &&
-            shiftResponse.data.length > 0
-          ) {
+          if (shiftResponse.success && shiftResponse.data?.length) {
             setShifts(shiftResponse.data);
-            setSelectedShift(shiftResponse.default_shift || 1);
+            setSelectedShift(shiftResponse.default_shift ?? 0);
           } else {
             setShifts([]);
           }
@@ -225,17 +235,26 @@ export default function DashboardClient() {
       return;
     }
     const isIn = status === 1;
+    // Check-out hanya sah untuk shift yang punya check-in. Sesi yang sudah keluar
+    // masih boleh ditutup lagi (batas 3x / 18 jam ditegakkan server).
+    if (!isIn && showShiftPicker && !checkOutShift.includes(selectedShift)) {
+      toast.show('error', 'Belum ada Check In pada shift yang dipilih');
+      return;
+    }
     isIn ? setIsCheckingIn(true) : setIsCheckingOut(true);
     try {
-      await api.submitAttendance({
+      const result = await api.submitAttendance({
         kar_nik: user.kar_nik,
         kd_cabang: user.kar_kd_unit,
         latitude: userLocation.lat.toString(),
         longitude: userLocation.lng.toString(),
         status_absen: status,
-        shift: shifts.length > 0 ? selectedShift : undefined,
+        shift: showShiftPicker ? selectedShift : 0,
       });
-      toast.show('success', isIn ? 'Check in berhasil' : 'Check out berhasil');
+      const namaShift = selectedShift === 0 ? 'Day Shift' : `Shift ${selectedShift}`;
+      const akhir = result?.terlambat ? ' (terlambat)' : '';
+      const verbs = result?.perbaikan ? 'diperbarui' : 'berhasil';
+      toast.show('success', `${isIn ? 'Check in' : 'Check out'} ${showShiftPicker ? namaShift : ''} ${verbs}${akhir}`);
       await loadUserData(user);
     } catch (e: any) {
       const msg = e?.response?.data?.message || (isIn ? 'Check in gagal, coba lagi' : 'Check out gagal, coba lagi');
@@ -301,18 +320,17 @@ export default function DashboardClient() {
   const distance = calculateDistance(userLocation.lat, userLocation.lng, effectiveUnit.latitude, effectiveUnit.longitude);
   const isWithinRange = distance <= 500;
 
-  // Tampilan masuk/keluar mengikuti shift yang dipilih (unit 20); sesi terbuka lebih dulu
-  const displaySession =
-    isUnit20 && shifts.length > 0
-      ? (sessions.find((s) => Number(s.shift) === selectedShift) ??
-        sessions.find((s) => !s._OUT) ??
-        null)
-      : (sessions[0] ?? null);
+  // Tampilan mengikuti shift yang dipilih. Sesi terbuka selalu bisa ditutup.
+  const displaySession = showShiftPicker
+    ? (sessions.find((s) => Number(s.shift) === selectedShift) ?? null)
+    : (sessions[0] ?? null);
   const checkInTime = displaySession?._IN;
   const checkOutTime = displaySession?._OUT;
   const hasIn = Boolean(checkInTime);
   const hasOut = Boolean(checkOutTime);
-  const statusLabel = hasIn && hasOut ? 'Selesai' : hasIn ? 'Aktif' : 'Belum absen';
+  const canCheckIn = !showShiftPicker ? !hasIn : !checkOutShift.includes(selectedShift);
+  const canCheckOut = !showShiftPicker ? !hasIn || !hasOut : checkOutShift.includes(selectedShift);
+  const statusLabel = openShift.length > 0 ? 'Aktif' : hasOut ? 'Selesai' : hasIn ? 'Belum keluar' : 'Belum absen';
 
   const menuItems: MenuItem[] = [
     {
@@ -420,7 +438,7 @@ export default function DashboardClient() {
             </div>
           )}
 
-          {isUnit20 && shifts.length > 0 && (
+          {showShiftPicker && shifts.length > 0 && (
             <div className="mt-4">
               <label className="text-xs text-white/80 mb-1.5 block">Shift</label>
               <select
@@ -430,7 +448,7 @@ export default function DashboardClient() {
               >
                 {shifts.map((s) => (
                   <option key={s.kd_shift} value={s.kd_shift}>
-                    Shift {s.kd_shift} ({s.nm_shift}) · {s.jam_mulai} - {s.jam_selesai}
+                    {s.kd_shift === 0 ? s.nm_shift : `Shift ${s.kd_shift} (${s.nm_shift}) · ${s.jam_mulai} - ${s.jam_selesai}`}
                   </option>
                 ))}
               </select>
@@ -479,23 +497,23 @@ export default function DashboardClient() {
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
               onClick={() => submitAbsensi(1)}
-              disabled={hasIn || isCheckingIn}
+              disabled={!canCheckIn || isCheckingIn}
               className={`flex items-center justify-center gap-2 min-h-12 rounded-lg font-semibold ${
-                hasIn ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-success-700 hover:bg-success-50'
+                !canCheckIn ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-success-700 hover:bg-success-50'
               }`}
             >
               {isCheckingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-              {hasIn ? 'Selesai' : 'Check In'}
+              {canCheckIn ? 'Check In' : 'Sudah Absen'}
             </button>
             <button
               onClick={() => submitAbsensi(2)}
-              disabled={hasOut || isCheckingOut}
+              disabled={!canCheckOut || isCheckingOut}
               className={`flex items-center justify-center gap-2 min-h-12 rounded-lg font-semibold ${
-                hasOut ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-warning-700 hover:bg-warning-50'
+                !canCheckOut ? 'bg-white/30 text-white/70 cursor-not-allowed' : 'bg-white text-warning-700 hover:bg-warning-50'
               }`}
             >
               {isCheckingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOutIcon className="w-4 h-4" />}
-              {hasOut ? 'Selesai' : 'Check Out'}
+              {canCheckOut ? 'Check Out' : 'Sudah Keluar'}
             </button>
           </div>
         </section>

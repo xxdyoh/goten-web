@@ -28,10 +28,11 @@ export async function uploadFoto(file: File): Promise<{ success: boolean; filena
 export interface ShiftItem {
   kd_shift: number;
   nm_shift: string;
-  jam_mulai: string;
-  jam_selesai: string;
-  toleransi_mulai: string;
-  toleransi_selesai: string;
+  // null untuk Day Shift (kd_shift 0) karena tidak punya jadwal jam.
+  jam_mulai: string | null;
+  jam_selesai: string | null;
+  toleransi_mulai: string | null;
+  toleransi_selesai: string | null;
 }
 
 export const api = {
@@ -79,7 +80,7 @@ export const api = {
     latitude: string;
     longitude: string;
     status_absen: number;
-    shift?: number;
+    shift: number;
   }) {
     const response = await axios.post(`${API_BASE_URL}/absensi/tambah`, data);
     return response.data;
