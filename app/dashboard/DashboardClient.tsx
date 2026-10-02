@@ -59,6 +59,8 @@ export default function DashboardClient() {
   // Shift yang punya check-in (terbuka atau sudah tertutup). Check-out boleh
   // diulang pada shift ini selama masih dalam batas 3x / 18 jam.
   const [checkOutShift, setCheckOutShift] = useState<number[]>([]);
+  // Work date yang boleh tampil di kartu, dari server.
+  const [sesiTampil, setSesiTampil] = useState<string[]>([]);
 
   const [sisaCuti, setSisaCuti] = useState<number | null>(null);
   const [isApprover, setIsApprover] = useState(false);
@@ -139,6 +141,11 @@ export default function DashboardClient() {
         } else {
           setSessions([]);
         }
+        // Work date yang boleh tampil di kartu. Server yang menentukan batas
+        // 01:00/09:00-nya, client tidak ikut menghitung.
+        setSesiTampil(Array.isArray(attendanceResponse.sesi_tampil)
+          ? attendanceResponse.sesi_tampil.map(String)
+          : []);
         // Server yang menentukan shift mana yang masih terbuka dan mana yang punya check-in.
         setOpenShift(Array.isArray(attendanceResponse.open_shift)
           ? attendanceResponse.open_shift.map(Number)
@@ -320,15 +327,20 @@ export default function DashboardClient() {
   const distance = calculateDistance(userLocation.lat, userLocation.lng, effectiveUnit.latitude, effectiveUnit.longitude);
   const isWithinRange = distance <= 500;
 
+  // Hanya sesi yang work date-nya diizinkan server yang tampil. Sesi yang sudah
+  // keluar dari hari sebelumnya tidak ditampilkan - itu bukan absen hari ini.
+  const sesiTampilRows = sessions.filter((s: any) => sesiTampil.includes(String(s.Tanggal)));
   // Tampilan mengikuti shift yang dipilih. Sesi terbuka selalu bisa ditutup.
   const displaySession = showShiftPicker
-    ? (sessions.find((s) => Number(s.shift) === selectedShift) ?? null)
-    : (sessions[0] ?? null);
+    ? (sesiTampilRows.find((s: any) => Number(s.shift) === selectedShift) ?? null)
+    : (sesiTampilRows[0] ?? null);
   const checkInTime = displaySession?._IN;
   const checkOutTime = displaySession?._OUT;
-  const hasIn = Boolean(checkInTime);
   const hasOut = Boolean(checkOutTime);
-  const canCheckIn = !showShiftPicker ? !hasIn : !checkOutShift.includes(selectedShift);
+  // Sesi yang sudah keluar dihitung selesai, jadi Check In aktif lagi.
+  // Hanya sesi yang masih terbuka (belum check-out) yang mengunci tombol.
+  const hasIn = Boolean(checkInTime) && !hasOut;
+  const canCheckIn = !showShiftPicker ? !hasIn : !openShift.includes(selectedShift);
   const canCheckOut = !showShiftPicker ? !hasIn || !hasOut : checkOutShift.includes(selectedShift);
   const statusLabel = openShift.length > 0 ? 'Aktif' : hasOut ? 'Selesai' : hasIn ? 'Belum keluar' : 'Belum absen';
 
